@@ -18,6 +18,22 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "https://czgyxziunupgypvtkbod.s
 const SUPABASE_KEY = process.env.SUPABASE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6Z3l4eml1bnVwZ3lwdnRrYm9kIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzM2OTIxNCwiZXhwIjoyMDkyOTQ1MjE0fQ.azBkUIm_bJGXaz3wkvHNU5MnltTN4F2It8jo8ZUrD_I";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ─── AUDIT LOG HELPER ─────────────────────────────────────
+async function logAudit({ roomId, roomCode, action, performedBy, details = {} }) {
+  try {
+    await supabase.from("rds_audit_log").insert({
+      room_id:      String(roomId),
+      room_code:    roomCode,
+      action,                          // "created" | "updated" | "deleted" | "exported"
+      performed_by: performedBy || "system",
+      details:      JSON.stringify(details),
+      created_at:   new Date().toISOString()
+    });
+  } catch (e) {
+    console.warn("Audit log failed:", e.message); // non-blocking
+  }
+}
+
 async function extractPdfText(base64) {
   const buf  = Buffer.from(base64, "base64");
   const data = new Uint8Array(buf);
@@ -503,6 +519,16 @@ app.post("/save", async (req, res) => {
     if (error) throw error;
     saved.data = safeJson(saved.data);
     console.log(`✓ Saved id=${now} roomCode=${roomCode}`);
+
+    // Audit log
+    await logAudit({
+      roomId:      now,
+      roomCode,
+      action:      "created",
+      performedBy: newData._submittedBy || "system",
+      details:     { roomName: newRow.roomname, department: newRow.department, project: newRow.project }
+    });
+
     res.status(201).json({ message: "Saved successfully", id: now, record: saved });
   } catch (e) {
     console.error("Save error:", e);
@@ -522,6 +548,16 @@ app.put("/data/:id", async (req, res) => {
     };
     const { data, error } = await supabase.from("rds_rooms").update(updates).eq("id", req.params.id).select().single();
     if (error) throw error;
+
+    // Audit log
+    await logAudit({
+      roomId:      req.params.id,
+      roomCode:    data.roomcode || "",
+      action:      "updated",
+      performedBy: req.body._editedBy || req.body._submittedBy || "system",
+      details:     { roomName: updates.roomname, department: updates.department }
+    });
+
     res.json({message:"Updated", record: data});
   } catch{res.status(500).json({error:"Failed to update"});}
 });
@@ -529,11 +565,34 @@ app.put("/data/:id", async (req, res) => {
 // DELETE
 app.delete("/data/:id", async (req, res) => {
   try {
+    const { data: room } = await supabase.from("rds_rooms").select("roomcode,roomname").eq("id", req.params.id).single();
     const { error } = await supabase.from("rds_rooms").delete().eq("id", req.params.id);
     if (error) throw error;
+    await logAudit({
+      roomId:      req.params.id,
+      roomCode:    room?.roomcode || "",
+      action:      "deleted",
+      performedBy: "system",
+      details:     { roomName: room?.roomname || "" }
+    });
     res.json({ message: "Deleted" });
   } catch {
     res.status(500).json({ error: "Failed to delete" });
+  }
+});
+
+// GET audit log for a room
+app.get("/audit/:roomId", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("rds_audit_log")
+      .select("*")
+      .eq("room_id", req.params.roomId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    res.json({ logs: data || [] });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to fetch audit log: " + e.message });
   }
 });
 
