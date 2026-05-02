@@ -539,6 +539,10 @@ app.post("/save", async (req, res) => {
 // PUT update
 app.put("/data/:id", async (req, res) => {
   try {
+    // Fetch old data first for diff
+    const { data: oldRow } = await supabase.from("rds_rooms").select("*").eq("id", req.params.id).single();
+    const oldData = oldRow?.data ? (typeof oldRow.data === "string" ? safeJson(oldRow.data) : oldRow.data) : {};
+
     const updates = {
       roomname:     req.body.roomName   || "",
       department:   req.body.department || "",
@@ -549,13 +553,28 @@ app.put("/data/:id", async (req, res) => {
     const { data, error } = await supabase.from("rds_rooms").update(updates).eq("id", req.params.id).select().single();
     if (error) throw error;
 
-    // Audit log
+    // Compute field-level diff
+    const newData = req.body;
+    const IGNORE  = new Set(["_editedBy","_submittedBy","roomImage","imagePath"]);
+    const changes = {};
+    const allKeys = new Set([...Object.keys(oldData), ...Object.keys(newData)]);
+    allKeys.forEach(k => {
+      if (IGNORE.has(k)) return;
+      const oldVal = String(oldData[k] ?? "").trim();
+      const newVal = String(newData[k] ?? "").trim();
+      if (oldVal !== newVal) changes[k] = { from: oldVal || "(empty)", to: newVal || "(empty)" };
+    });
+
     await logAudit({
       roomId:      req.params.id,
       roomCode:    data.roomcode || "",
       action:      "updated",
       performedBy: req.body._editedBy || req.body._submittedBy || "system",
-      details:     { roomName: updates.roomname, department: updates.department }
+      details:     {
+        roomName:   updates.roomname,
+        department: updates.department,
+        changes
+      }
     });
 
     res.json({message:"Updated", record: data});
