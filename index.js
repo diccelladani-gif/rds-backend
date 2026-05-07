@@ -79,6 +79,16 @@ if (!fs.existsSync(DATA_DIR))  fs.mkdirSync(DATA_DIR,  { recursive: true });
 if (!fs.existsSync(IMAGE_DIR)) fs.mkdirSync(IMAGE_DIR, { recursive: true });
 
 // ─── FIELD LABEL FORMATTER ───────────────────────────────
+function formatFieldValue(key, val) {
+  if (key === "userGroups") {
+    try {
+      const arr = JSON.parse(val);
+      if (Array.isArray(arr)) return arr.map(u => `${u.role} × ${u.qty}`).join(", ");
+    } catch (_) {}
+  }
+  return String(val);
+}
+
 function toLabel(key) {
   return key
     .replace(/([A-Z])/g, " $1")
@@ -88,22 +98,17 @@ function toLabel(key) {
 
 // ─── SECTION DEFINITIONS ─────────────────────────────────
 const SECTIONS = [
-  { label: "1. Room Identity",           keys: ["project","department","roomName","roomCode","location","roomTypology","criticalityLevel","infectionRiskCategory","isolationType"] },
-  { label: "2. Function & Workflow",     keys: ["roomFunction","keyActivities","userGroups","operationalScenarios"] },
-  { label: "3. Capacity & Operations",   keys: ["patientCapacity","staffRequirement","peakLoad","throughput","averageStayTime","surgeCapacity","operationalHours"] },
-  { label: "4. Planning & Zoning",       keys: ["patientZone","staffZone","equipmentZone","cleanZone","dirtyZone","patientFlow","staffFlow","materialFlow","entryPoints","restrictedZones"] },
-  { label: "5. Adjacency Matrix",        keys: ["mustBeAdjacent","shouldBeAdjacent","avoidAdjacency"] },
-  { label: "6. Spatial Requirements",    keys: ["netArea","minimumDimensions","clearances","ceilingHeight","doorType","doorSize","accessibility"] },
-  { label: "7. Room Finishes",           keys: ["floor","skirting","wallFinish","ceiling","cabinetry","worktop","specialFinishes"] },
-  { label: "8. HVAC",                    keys: ["acuCategory","ventilationRate","acuCount","pressureControl","tempRange","humidityRange","filtrationGrade"] },
-  { label: "9. Electrical",              keys: ["powerLoad","normalPower","emergencyPower","ups","numberOfSockets","specialOutlets"] },
-  { label: "10. Medical Gases",          keys: ["oxygen","medicalAir","vacuum","nitrousOxide"] },
-  { label: "11. Plumbing",               keys: ["handWash","wc","shower","plumbingSpecialSystems"] },
-  { label: "12. Digital & Smart",        keys: ["hisEmr","pacs","lis","rtls","nurseCall","cctv","iotSensors","aiAnalytics"] },
-  { label: "13. Safety & Infection",     keys: ["pressureRegime","isolationLevel","radiationProtection","biohazardHandling","fireSafety","emergencySystems"] },
-  { label: "14. User Experience",        keys: ["lightingQuality","acousticControl","privacy","patientComfort","familyInteraction","visualEnvironment"] },
-  { label: "15. Fittings & Furniture",   keys: ["airFlowmeter","oxygenFlowmeter","suctionAdapterLowFlow","suctionBottle","oxygenFlowmeterLowFlow","trolleyProcedure","blenderAirOxygen","stoolAdjustableMobile","curtainTrackSystem","ivHook","additionalFF"] },
-  { label: "16. Fixtures & Equipment",   keys: ["infusionPumpSyringe","examinationLight","physiologicMonitor","infantIncubator","phototherapyLamp","supplyUnitCeiling","infusionPumpEnteral","infusionPumpSingleChannel","ventilatorNeonatal","additionalFE"] },
+  { label: "1. Room Identity & General Information",  keys: ["project","department","roomName","roomCode","location","roomTypology","criticalityLevel","infectionRiskCategory","isolationType"] },
+  { label: "2. Architectural & Spatial Requirements", keys: ["netArea","minimumDimensions","clearances","ceilingHeight","doorType","doorSize","accessibility"] },
+  { label: "3. Interior Finishes & Aesthetics",       keys: ["floor","skirting","walls","ceiling","wallProtection","specialFinishes"] },
+  { label: "4. Clinical Functionality & Workflow",    keys: ["roomFunction","keyActivities","userGroups","operationalScenarios","patientZone","staffZone","equipmentZone","cleanZone","dirtyZone","patientFlow","staffFlow","materialFlow","entryPoints","restrictedZones"] },
+  { label: "5. Capacity & Operations",                keys: ["patientCapacity","staffRequirement","peakLoad","throughput","averageStayTime","surgeCapacity","operationalHours"] },
+  { label: "6. Adjacency Matrix",                     keys: ["mustBeAdjacent","shouldBeAdjacent","avoidAdjacency"] },
+  { label: "7. MEP & Engineering Systems",            keys: ["airChangesACH","pressure","temperature","humidity","filtration","airflowDirection","pandemicMode","powerLoad","normalPower","emergencyPower","ups","numberOfSockets","specialOutlets","oxygen","medicalAir","vacuum","nitrousOxide","handWash","wc","shower","plumbingSpecialSystems"] },
+  { label: "8. Digital & Smart Systems",              keys: ["hisEmr","pacs","lis","rtls","nurseCall","cctv","iotSensors","aiAnalytics"] },
+  { label: "9. Safety & Infection Control",           keys: ["pressureRegime","isolationLevel","radiationProtection","biohazardHandling","fireSafety","emergencySystems"] },
+  { label: "10. Stakeholder Experience",              keys: ["lightingQuality","acousticControl","privacy","patientComfort","familyInteraction","visualEnvironment"] },
+  { label: "11. Fittings, Fixtures & Equipment",      keys: ["airFlowmeter","oxygenFlowmeter","suctionAdapterLowFlow","suctionBottle","oxygenFlowmeterLowFlow","trolleyProcedure","blenderAirOxygen","stoolAdjustableMobile","curtainTrackSystem","ivHook","additionalFF","infusionPumpSyringe","examinationLight","physiologicMonitor","infantIncubator","phototherapyLamp","supplyUnitCeiling","infusionPumpEnteral","infusionPumpSingleChannel","ventilatorNeonatal","additionalFE"] },
 ];
 
 // ─── DATA HELPERS ─────────────────────────────────────────
@@ -286,7 +291,7 @@ function buildPDF(rows) {
       SECTIONS.forEach(sec => {
         const pairs = sec.keys
           .filter(k => d[k] != null && String(d[k]).trim() !== "")
-          .map(k => [toLabel(k), String(d[k])]);
+          .map(k => [toLabel(k), formatFieldValue(k, d[k])]);
         if (!pairs.length) return;
 
         const needed = 24 + pairs.length * 20 + 12;
@@ -387,7 +392,7 @@ function buildExcel(rows) {
       let any=false;
       sec.keys.forEach(k => {
         const v=d[k];
-        if(v!=null && v!==""){aoa.push([toLabel(k),String(v)]);any=true;}
+        if(v!=null && v!==""){aoa.push([toLabel(k), formatFieldValue(k, v)]);any=true;}
       });
       if(!any) aoa.push(["(No data entered)","",""]);
       aoa.push([]);
