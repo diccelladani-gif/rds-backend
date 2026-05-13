@@ -38,13 +38,75 @@ async function extractPdfText(base64) {
   const buf  = Buffer.from(base64, "base64");
   const data = new Uint8Array(buf);
   const doc  = await pdfjsLib.getDocument({ data, useWorkerFetch: false, isEvalSupported: false }).promise;
-  let text = "";
+
+  const allLines = [];
+
   for (let i = 1; i <= doc.numPages; i++) {
     const page    = await doc.getPage(i);
     const content = await page.getTextContent();
-    text += content.items.map(item => item.str).join(" ") + "\n";
+    const vp      = page.getViewport({ scale: 1 });
+    const pageH   = vp.height;
+
+    // Collect items with normalized Y (top-down) and X positions
+    const items = content.items
+      .filter(item => item.str && item.str.trim())
+      .map(item => ({
+        str: item.str.trim(),
+        x:   Math.round(item.transform[4]),
+        y:   Math.round(pageH - item.transform[5]), // flip Y to top-down
+      }));
+
+    // Group items into lines by Y proximity (within 6px = same line)
+    const lineMap = new Map();
+    items.forEach(item => {
+      const lineY = [...lineMap.keys()].find(k => Math.abs(k - item.y) <= 6);
+      if (lineY !== undefined) {
+        lineMap.get(lineY).push(item);
+      } else {
+        lineMap.set(item.y, [item]);
+      }
+    });
+
+    // Sort lines top-to-bottom, items left-to-right within line
+    const sortedLines = [...lineMap.entries()]
+      .sort(([ya], [yb]) => ya - yb)
+      .map(([, lineItems]) =>
+        lineItems.sort((a, b) => a.x - b.x).map(i => i.str)
+      );
+
+    // Reconstruct structured text:
+    // If line has 2+ items with x-gap > 80px → treat as label:value pair
+    // Otherwise join as single line
+    for (const lineItems of sortedLines) {
+      if (lineItems.length === 0) continue;
+
+      if (lineItems.length >= 2) {
+        // Detect label:value structure
+        const joined = lineItems.join("  |  ");
+        // Also emit as "Label: Value" for better AI parsing
+        const labelVal = lineItems[0] + ": " + lineItems.slice(1).join(" ");
+        allLines.push(labelVal);
+        allLines.push(joined);
+      } else {
+        allLines.push(lineItems[0]);
+      }
+    }
+    allLines.push("--- Page Break ---");
   }
-  return text.trim();
+
+  // Post-process: merge continuation lines (items that are values continuing on next line)
+  const merged = [];
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i];
+    // If line looks like a heading/section, add separator
+    if (/^\d+\.\s+[A-Z]/.test(line)) {
+      merged.push("\n" + line);
+    } else {
+      merged.push(line);
+    }
+  }
+
+  return merged.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 const app = express();
@@ -940,15 +1002,26 @@ app.post("/extract", async (req, res) => {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user",   content: `Extract all Room Data Sheet fields from this document. Important instructions:
 
-1. "roomFunction" field: Extract ALL bullet points from the room function/description section at the top. Join them with semicolons into one string. Do not truncate.
+1. The document uses "Label: Value" format on each line — extract accordingly.
 
-2. "additionalFF" field: Extract ALL items from "Fittings and Furniture (FF)" table as: "ItemCode: Description x Quantity" joined with semicolons. Example: "FF 150: Air flowmeter x1; FF 1465: Bracket: suction bottle x1; Curtain Track System x1 set"
+2. "roomFunction" field: Extract ALL bullet points / activity lines. Join with semicolons. Do not truncate.
 
-3. "additionalFE" field: Extract ALL items from "Fixtures, Equipment and associated Services (FE)" table as: "ItemCode: Description x Quantity" joined with semicolons. Example: "FE 31700: Light: examination ceiling x1; FE 36050: Monitor: cardiac x1"
+3. "additionalFF" field: Extract ALL items from Fittings and Furniture table as: "Code: Description xQty" joined with semicolons.
 
-4. For other fields, use 80-90% confidence inference — if the document says "PACU" infer roomTypology as "Other", criticalityLevel as "High", etc.
+4. "additionalFE" field: Extract ALL items from Fixtures/Equipment table as: "Code: Description xQty" joined with semicolons.
 
-5. Extract numeric values as numbers (netArea, patientCapacity, etc.)
+5. Numeric conversions — these values may appear as text like "One (1)", "1 No.", "2 Nos." — always extract as a plain number:
+   netArea, patientCapacity, staffRequirement, peakLoad, powerLoad, numberOfSockets,
+   oxygen, medicalAir, vacuum, nitrousOxide, handWash, wc, shower, ceilingHeight,
+   airFlowmeter, oxygenFlowmeter, suctionAdapterLowFlow, suctionBottle,
+   oxygenFlowmeterLowFlow, trolleyProcedure, blenderAirOxygen, stoolAdjustableMobile,
+   curtainTrackSystem, ivHook, infusionPumpSyringe, examinationLight, physiologicMonitor,
+   infantIncubator, phototherapyLamp, supplyUnitCeiling, infusionPumpEnteral,
+   infusionPumpSingleChannel, ventilatorNeonatal
+
+6. For select fields match closest option (e.g. "24/7" → "24×7", "negative" → "Negative (-ve)").
+
+7. Use 80-90% inference for unlisted fields when context is clear.
 
 Document content:
 ${textContent.slice(0, 28000)}` }
