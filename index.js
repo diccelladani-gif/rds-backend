@@ -723,11 +723,19 @@ async function saveToStorage(buf, filename, mimetype) {
   } catch(e) { console.warn("Storage upload failed:", e.message); }
 }
 
+// ── Clean room name for use in filename ──────────────────
+function cleanName(row) {
+  const name = row.roomname || row.roomName ||
+    (row.data ? (typeof row.data === "string" ? JSON.parse(row.data) : row.data)?.roomName : "") || "Room";
+  return name.replace(/[^a-zA-Z0-9\s\-_]/g, "").replace(/\s+/g, "_").slice(0, 40);
+}
+
 app.get("/export/excel", async (req, res) => {
   try {
     const rows = await readAll();
     if(!rows.length) return res.status(404).json({error:"No records found"});
-    const filename = `RDS_All_${new Date().toISOString().slice(0,10)}.xlsx`;
+    const date     = new Date().toISOString().slice(0,10);
+    const filename = `RDS_All_Rooms_${date}.xlsx`;
     const wb=buildExcel(rows), buf=XLSX.write(wb,{type:"buffer",bookType:"xlsx"});
     saveToStorage(buf, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -741,7 +749,9 @@ app.get("/export/excel/:id", async (req, res) => {
     const all  = await readAll();
     const rows = all.filter(r=>String(r.id)===req.params.id);
     if(!rows.length) return res.status(404).json({error:"Record not found"});
-    const filename = `RDS_${rows[0].roomcode||rows[0].id}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    const date     = new Date().toISOString().slice(0,10);
+    const name     = cleanName(rows[0]);
+    const filename = `RDS_${name}_${date}.xlsx`;
     const wb=buildExcel(rows), buf=XLSX.write(wb,{type:"buffer",bookType:"xlsx"});
     saveToStorage(buf, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -758,10 +768,12 @@ app.get("/export/pdf", async (req, res) => {
   try {
     const rows = await readAll();
     if (!rows.length) return res.status(404).json({ error: "No records found. Submit at least one RDS first." });
-    console.log(`Generating PDF for ${rows.length} room(s)...`);
+    const date     = new Date().toISOString().slice(0,10);
+    const filename = `RDS_All_Rooms_${date}.pdf`;
     const buf = await buildPDF(rows);
+    saveToStorage(buf, filename, "application/pdf");
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="RDS_All_${new Date().toISOString().slice(0,10)}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Content-Length", buf.length);
     res.send(buf);
   } catch(e) {
@@ -775,9 +787,13 @@ app.get("/export/pdf/:id", async (req, res) => {
     const all  = await readAll();
     const rows = all.filter(r => String(r.id) === req.params.id);
     if (!rows.length) return res.status(404).json({ error: "Record not found" });
+    const date     = new Date().toISOString().slice(0,10);
+    const name     = cleanName(rows[0]);
+    const filename = `RDS_${name}_${date}.pdf`;
     const buf = await buildPDF(rows);
+    saveToStorage(buf, filename, "application/pdf");
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="RDS_${rows[0].roomcode || rows[0].id}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Content-Length", buf.length);
     res.send(buf);
   } catch(e) {
