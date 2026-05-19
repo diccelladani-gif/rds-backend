@@ -160,17 +160,85 @@ function toLabel(key) {
 
 // ─── SECTION DEFINITIONS ─────────────────────────────────
 const SECTIONS = [
-  { label: "1. Room Identity & General Information",  keys: ["project","department","roomName","roomCode","location","roomTypology","criticalityLevel","infectionRiskCategory","isolationType"] },
-  { label: "2. Architectural & Spatial Requirements", keys: ["netArea","minimumDimensions","clearances","ceilingHeight","doorType","doorSize","accessibility"] },
-  { label: "3. Interior Finishes & Aesthetics",       keys: ["floor","skirting","walls","ceiling","wallProtection","specialFinishes"] },
-  { label: "4. Clinical Functionality & Workflow",    keys: ["roomFunction","keyActivities","userGroups","operationalScenarios","patientZone","staffZone","equipmentZone","cleanZone","dirtyZone","patientFlow","staffFlow","materialFlow","entryPoints","restrictedZones"] },
-  { label: "5. Capacity & Operations",                keys: ["patientCapacity","staffRequirement","peakLoad","throughput","averageStayTime","surgeCapacity","operationalHours"] },
-  { label: "6. Adjacency Matrix",                     keys: ["mustBeAdjacent","shouldBeAdjacent","avoidAdjacency"] },
-  { label: "7. MEP & Engineering Systems",            keys: ["airChangesACH","pressure","temperature","humidity","filtration","airflowDirection","pandemicMode","powerLoad","normalPower","emergencyPower","ups","numberOfSockets","specialOutlets","oxygen","medicalAir","vacuum","nitrousOxide","handWash","wc","shower","plumbingSpecialSystems"] },
-  { label: "8. Digital & Smart Systems",              keys: ["hisEmr","pacs","lis","rtls","nurseCall","cctv","iotSensors","aiAnalytics"] },
-  { label: "9. Safety & Infection Control",           keys: ["pressureRegime","isolationLevel","radiationProtection","biohazardHandling","fireSafety","emergencySystems"] },
-  { label: "10. Stakeholder Experience",              keys: ["lightingQuality","acousticControl","privacy","patientComfort","familyInteraction","visualEnvironment"] },
-  { label: "11. Fittings, Fixtures & Equipment",      keys: ["airFlowmeter","oxygenFlowmeter","suctionAdapterLowFlow","suctionBottle","oxygenFlowmeterLowFlow","trolleyProcedure","blenderAirOxygen","stoolAdjustableMobile","curtainTrackSystem","ivHook","additionalFF","infusionPumpSyringe","examinationLight","physiologicMonitor","infantIncubator","phototherapyLamp","supplyUnitCeiling","infusionPumpEnteral","infusionPumpSingleChannel","ventilatorNeonatal","additionalFE"] },
+  { label: "1. Room Identity & General Information",  keys: [
+      "projectName","projectCode","type","department","departmentCode","category","categoryCode",
+      "roomName","roomCode","location","roomTypology","criticalityLevel","infectionRiskCategory","isolationType"
+  ]},
+  { label: "2. Architectural & Spatial Requirements", keys: [
+      "netArea","minimumDimension","clearance","floorToSoffitHeight","floorToCeilingHeight",
+      "doorType","doorSize","accessibilityCompliance",
+      "hazardousStorage","radiationShielding","vibrationIsolation","magneticShielding",
+      "soundInsulation","rfShielding","equipmentMountingSupport","structuralFloorDrop","otherSpecialNeeds",
+      "constructionMatrix"
+  ]},
+  { label: "3. Interior Finishes & Aesthetics",       keys: [
+      "floor","floorSpec","skirting","walls","wallsSpec","ceiling","ceilingSpec",
+      "wallProtection","wallProtectionNotes","internalGlazing","hatches","specialFinishes",
+      "doorConfig","windowConfig","sanitaryFittings"
+  ]},
+  { label: "4. Interior Lighting & Furniture",        keys: [
+      "lightingControl","lightingControlNotes",
+      "lightingLevelStandard","lightingLevelTreatment","lightingLevelOther",
+      "lightFitT5Fluorescent","lightFitLEDTube","lightFitLEDStrip","lightFitCompactPL",
+      "lightFitLEDDownlight","lightFitBiophilic","lightFitCeilingLight","lightFitOthers","lightFittingNotes",
+      "ctrlOnOff","ctrlTimer","ctrlMotionSensor","ctrlPhotosensor","ctrlLMS","ctrlOthers","lightingControlDeviceNotes",
+      "furnitureLaboratoryBenches","furnitureSystemFurniture","furnitureLooseChairs","furnitureModularCabin",
+      "furnitureCustom","furnitureFixedBench","furnitureLockers","furnitureCoatHooks",
+      "furnitureBulletinBoard","furnitureMarkerBoard","furnitureHandRail","furnitureOthers","furnitureNotes",
+      "cabBuiltInIntegrated","cabMobilePedestal","cabOverheadCabinets","cabUndercountCabinets",
+      "cabOpenShelvesOverhead","cabOpenShelvesUnder","cabFullHeightCabinets","cabFullHeightShelving",
+      "cabInventoryStocked","cabOthers","cabinetryNotes",
+      "fumeFloorVertical1200","fumeFloorVertical1500","fumeFloorVertical1800",
+      "fumeWalkIn1200","fumeWalkIn1500","fumeWalkIn1800",
+      "fumePortable1200","fumePortable1500","fumePortable1800","fumeNotes"
+  ]},
+  { label: "5. Clinical Functionality & Workflow",    keys: [
+      "roomFunction","keyActivities","userGroups","operationalScenarios",
+      "patientZone","staffZone","equipmentZone","cleanZone","dirtyZone",
+      "patientFlow","staffFlow","materialFlow","entryPoints","restrictedZones","medicalGasMatrix"
+  ]},
+  { label: "6. Capacity & Operations",                keys: [
+      "patientCapacity","staffRequirement","peakLoad","throughput","averageStayTime","surgeCapacity","operationalHours"
+  ]},
+  { label: "7. Adjacency Matrix",                     keys: ["mustBeAdjacent","shouldBeAdjacent","avoidAdjacency"] },
+  { label: "8. MEP & Engineering Systems",            keys: [
+      "airChangesACH","pressure","temperature","humidity","filtration",
+      "providedFanInRoom","airflowDirection","naturalVentilation","mechanicalVentilation","smokeExtraction","pandemicMode",
+      "powerLoad","normalPower","emergencyPower","ups","numberOfSockets","specialOutlets","ssoMatrix","isolatorMatrix",
+      "equip_dedicatedCircuit","equip_upsBackup","equip_vibrationIsolation","equip_bmsInterface",
+      "equip_isolatedGrounding","equip_humidityControl","equip_remoteMonitoring","equip_voltageStabilizer",
+      "equip_antiStaticFlooring","equip_fireRatedEnclosure","equip_fireAlarmInterface","equip_gasDetection",
+      "oxygen","medicalAir","vacuum","nitrousOxide",
+      "handWash","wc","shower","plumbingSpecialSystems"
+  ]},
+  { label: "9. Digital & Smart Systems",              keys: [
+      "hisEmr","pacs","lis","rtls","nurseCall","cctv","iotSensors","aiAnalytics","elvMatrix","itAccessories"
+  ]},
+  { label: "10. Safety & Infection Control",          keys: [
+      "coreSafetyMatrix","infectionControlMatrix","plumbingFixturesMatrix",
+      "fireLifeSafetyMatrix","electricalSafetyMatrix","physicalSecurityMatrix","chemHazardMatrix","safetyAdditionalNotes",
+      "pressureRegime","isolationLevel","radiationProtection","biohazardHandling","fireSafety","emergencySystems"
+  ]},
+  { label: "11. Stakeholder Experience",              keys: [
+      "lightingQuality","lightingNotes","acousticControl","acousticNotes",
+      "thermalOdorControl","thermalOdorNotes","patientComfort","patientComfortNotes",
+      "privacy","familyInteraction","familyInteractionNotes","visualEnvironment","visualEnvironmentNotes",
+      "biophiliaHealingEnvironment","biophiliaHealingNotes",
+      "technologyInfotainment","technologyInfotainmentNotes","infectionControlHygiene","infectionControlHygieneNotes"
+  ]},
+  { label: "12. Fittings, Fixtures & Equipment",      keys: [
+      "airFlowmeter","oxygenFlowmeter","suctionAdapterLowFlow","suctionBottle","oxygenFlowmeterLowFlow",
+      "trolleyProcedure","blenderAirOxygen","stoolAdjustableMobile","curtainTrackSystem","ivHook","additionalFF",
+      "infusionPumpSyringe","examinationLight","physiologicMonitor","infantIncubator","phototherapyLamp",
+      "supplyUnitCeiling","infusionPumpEnteral","infusionPumpSingleChannel","ventilatorNeonatal","additionalFE"
+  ]},
+  { label: "13. Waste Management",                    keys: [
+      "wmBiohazard","wmRadioactive","wmFlammableSolvent","wmChemicalWaste","wmHumanAnatomical",
+      "wmMicrobiologyWaste","wmWasteSharps","wmCytotoxicDrugs",
+      "wmSoiledWaste","wmSolidWaste","wmLiquidWaste","wmDiscardedContainers",
+      "wmUsedOil","wmEwaste","wmConfidentialPaper","wmFoodPantryWaste",
+      "wmOthers1","wmOthers2","wmNotes"
+  ]},
 ];
 
 // ─── DATA HELPERS ─────────────────────────────────────────
@@ -803,7 +871,7 @@ app.get("/export/pdf/:id", async (req, res) => {
 });
 
 // ─── AI EXTRACT ROUTE ─────────────────────────────────────
-const FIELD_LIST = `project,department,roomName,roomCode,location,roomTypology,criticalityLevel,infectionRiskCategory,isolationType,roomFunction,keyActivities,userGroups,operationalScenarios,patientCapacity,staffRequirement,peakLoad,throughput,averageStayTime,surgeCapacity,operationalHours,patientZone,staffZone,equipmentZone,cleanZone,dirtyZone,patientFlow,staffFlow,materialFlow,entryPoints,restrictedZones,mustBeAdjacent,shouldBeAdjacent,avoidAdjacency,netArea,minimumDimensions,clearances,ceilingHeight,doorType,doorSize,accessibility,floor,skirting,wallFinish,ceiling,cabinetry,worktop,specialFinishes,acuCategory,ventilationRate,acuCount,pressureControl,tempRange,humidityRange,filtrationGrade,powerLoad,normalPower,emergencyPower,ups,numberOfSockets,specialOutlets,oxygen,medicalAir,vacuum,nitrousOxide,handWash,wc,shower,plumbingSpecialSystems,hisEmr,pacs,lis,rtls,nurseCall,cctv,iotSensors,aiAnalytics,pressureRegime,isolationLevel,radiationProtection,biohazardHandling,fireSafety,emergencySystems,lightingQuality,acousticControl,privacy,patientComfort,familyInteraction,visualEnvironment,airFlowmeter,oxygenFlowmeter,suctionAdapterLowFlow,suctionBottle,oxygenFlowmeterLowFlow,trolleyProcedure,blenderAirOxygen,stoolAdjustableMobile,curtainTrackSystem,ivHook,additionalFF,infusionPumpSyringe,examinationLight,physiologicMonitor,infantIncubator,phototherapyLamp,supplyUnitCeiling,infusionPumpEnteral,infusionPumpSingleChannel,ventilatorNeonatal,additionalFE`;
+const FIELD_LIST = `projectName,projectCode,type,department,departmentCode,category,categoryCode,roomName,roomCode,location,roomTypology,criticalityLevel,infectionRiskCategory,isolationType,netArea,minimumDimension,clearance,floorToSoffitHeight,floorToCeilingHeight,doorType,doorSize,accessibilityCompliance,hazardousStorage,radiationShielding,vibrationIsolation,magneticShielding,soundInsulation,rfShielding,equipmentMountingSupport,structuralFloorDrop,otherSpecialNeeds,constructionMatrix,floor,floorSpec,skirting,walls,wallsSpec,ceiling,ceilingSpec,wallProtection,wallProtectionNotes,internalGlazing,hatches,specialFinishes,doorConfig,windowConfig,sanitaryFittings,lightingControl,lightingControlNotes,lightingLevelStandard,lightingLevelTreatment,lightingLevelOther,lightFitT5Fluorescent,lightFitLEDTube,lightFitLEDStrip,lightFitCompactPL,lightFitLEDDownlight,lightFitBiophilic,lightFitCeilingLight,lightFitOthers,lightFittingNotes,ctrlOnOff,ctrlTimer,ctrlMotionSensor,ctrlPhotosensor,ctrlLMS,ctrlOthers,lightingControlDeviceNotes,furnitureLaboratoryBenches,furnitureSystemFurniture,furnitureLooseChairs,furnitureModularCabin,furnitureCustom,furnitureFixedBench,furnitureLockers,furnitureCoatHooks,furnitureBulletinBoard,furnitureMarkerBoard,furnitureHandRail,furnitureOthers,furnitureNotes,cabBuiltInIntegrated,cabMobilePedestal,cabOverheadCabinets,cabUndercountCabinets,cabOpenShelvesOverhead,cabOpenShelvesUnder,cabFullHeightCabinets,cabFullHeightShelving,cabInventoryStocked,cabOthers,cabinetryNotes,fumeFloorVertical1200,fumeFloorVertical1500,fumeFloorVertical1800,fumeWalkIn1200,fumeWalkIn1500,fumeWalkIn1800,fumePortable1200,fumePortable1500,fumePortable1800,fumeNotes,roomFunction,keyActivities,userGroups,operationalScenarios,patientZone,staffZone,equipmentZone,cleanZone,dirtyZone,patientFlow,staffFlow,materialFlow,entryPoints,restrictedZones,medicalGasMatrix,patientCapacity,staffRequirement,peakLoad,throughput,averageStayTime,surgeCapacity,operationalHours,mustBeAdjacent,shouldBeAdjacent,avoidAdjacency,airChangesACH,pressure,temperature,humidity,filtration,providedFanInRoom,airflowDirection,naturalVentilation,mechanicalVentilation,smokeExtraction,pandemicMode,powerLoad,normalPower,emergencyPower,ups,numberOfSockets,specialOutlets,ssoMatrix,isolatorMatrix,equip_dedicatedCircuit,equip_upsBackup,equip_vibrationIsolation,equip_bmsInterface,equip_isolatedGrounding,equip_humidityControl,equip_remoteMonitoring,equip_voltageStabilizer,equip_antiStaticFlooring,equip_fireRatedEnclosure,equip_fireAlarmInterface,equip_gasDetection,oxygen,medicalAir,vacuum,nitrousOxide,handWash,wc,shower,plumbingSpecialSystems,hisEmr,pacs,lis,rtls,nurseCall,cctv,iotSensors,aiAnalytics,elvMatrix,itAccessories,coreSafetyMatrix,infectionControlMatrix,plumbingFixturesMatrix,fireLifeSafetyMatrix,electricalSafetyMatrix,physicalSecurityMatrix,chemHazardMatrix,safetyAdditionalNotes,pressureRegime,isolationLevel,radiationProtection,biohazardHandling,fireSafety,emergencySystems,lightingQuality,lightingNotes,acousticControl,acousticNotes,thermalOdorControl,thermalOdorNotes,patientComfort,patientComfortNotes,privacy,familyInteraction,familyInteractionNotes,visualEnvironment,visualEnvironmentNotes,biophiliaHealingEnvironment,biophiliaHealingNotes,technologyInfotainment,technologyInfotainmentNotes,infectionControlHygiene,infectionControlHygieneNotes,airFlowmeter,oxygenFlowmeter,suctionAdapterLowFlow,suctionBottle,oxygenFlowmeterLowFlow,trolleyProcedure,blenderAirOxygen,stoolAdjustableMobile,curtainTrackSystem,ivHook,additionalFF,infusionPumpSyringe,examinationLight,physiologicMonitor,infantIncubator,phototherapyLamp,supplyUnitCeiling,infusionPumpEnteral,infusionPumpSingleChannel,ventilatorNeonatal,additionalFE,wmBiohazard,wmRadioactive,wmFlammableSolvent,wmChemicalWaste,wmHumanAnatomical,wmMicrobiologyWaste,wmWasteSharps,wmCytotoxicDrugs,wmSoiledWaste,wmSolidWaste,wmLiquidWaste,wmDiscardedContainers,wmUsedOil,wmEwaste,wmConfidentialPaper,wmFoodPantryWaste,wmOthers1,wmOthers2,wmNotes`;
 
 const SYSTEM_PROMPT = `You are an expert at extracting Room Data Sheet (RDS) data from documents.
 Extract values and return ONLY a valid JSON object using ONLY these exact keys where data is found:
@@ -811,7 +879,7 @@ Extract values and return ONLY a valid JSON object using ONLY these exact keys w
 Rules:
 - Omit keys with no matching data (no nulls, no empty strings)
 - Number fields (netArea,patientCapacity,staffRequirement,peakLoad,powerLoad,numberOfSockets,airChangesACH,ceilingHeight,oxygen,medicalAir,vacuum,nitrousOxide,handWash,wc,shower and all equipment qty fields): return numbers only
-- Yes/No fields (ups,cctv,pandemicMode): return exactly "Yes" or "No"
+- Yes/No fields return exactly "Yes" or "No": ups,cctv,pandemicMode,internalGlazing,hatches,hazardousStorage,radiationShielding,vibrationIsolation,magneticShielding,soundInsulation,rfShielding,equipmentMountingSupport,providedFanInRoom,airflowDirection,naturalVentilation,mechanicalVentilation,smokeExtraction,equip_dedicatedCircuit,equip_upsBackup,equip_vibrationIsolation,equip_bmsInterface,equip_isolatedGrounding,equip_humidityControl,equip_remoteMonitoring,equip_voltageStabilizer,equip_antiStaticFlooring,equip_fireRatedEnclosure,equip_fireAlarmInterface,equip_gasDetection,wmBiohazard,wmRadioactive,wmFlammableSolvent,wmChemicalWaste,wmHumanAnatomical,wmMicrobiologyWaste,wmWasteSharps,wmCytotoxicDrugs,wmSoiledWaste,wmSolidWaste,wmLiquidWaste,wmDiscardedContainers,wmUsedOil,wmEwaste,wmConfidentialPaper,wmFoodPantryWaste,lightFitT5Fluorescent,lightFitLEDTube,lightFitLEDStrip,lightFitCompactPL,lightFitLEDDownlight,lightFitBiophilic,lightFitCeilingLight,lightFitOthers,ctrlOnOff,ctrlTimer,ctrlMotionSensor,ctrlPhotosensor,ctrlLMS,ctrlOthers,furnitureLaboratoryBenches,furnitureSystemFurniture,furnitureLooseChairs,furnitureModularCabin,furnitureCustom,furnitureFixedBench,furnitureLockers,furnitureCoatHooks,furnitureBulletinBoard,furnitureMarkerBoard,furnitureHandRail,furnitureOthers,cabBuiltInIntegrated,cabMobilePedestal,cabOverheadCabinets,cabUndercountCabinets,cabOpenShelvesOverhead,cabOpenShelvesUnder,cabFullHeightCabinets,cabFullHeightShelving,cabInventoryStocked,cabOthers,fumeFloorVertical1200,fumeFloorVertical1500,fumeFloorVertical1800,fumeWalkIn1200,fumeWalkIn1500,fumeWalkIn1800,fumePortable1200,fumePortable1500,fumePortable1800
 - For SELECT fields use ONLY these exact values:
   roomTypology: "ICU"|"Ward"|"OT"|"Emergency"|"Outpatient"|"Diagnostic"|"Laboratory"|"Pharmacy"|"Administrative"|"Support"|"NICU"|"PICU"|"CCU"|"HDU"|"Isolation"|"Other"
   criticalityLevel: "Critical"|"High"|"Medium"|"Low"|"Ancillary"
@@ -826,6 +894,21 @@ Rules:
   isolationLevel: "Level 1 – Standard"|"Level 2 – Enhanced"|"Level 3 – Strict"|"Level 4 – Maximum / BSL-4"|"Not Applicable"
   radiationProtection: "Not Required"|"Lead Lining Required"|"Lead Glass Windows"|"Controlled Zone"|"Supervised Zone"
   biohazardHandling: "Not Applicable"|"BSL-1"|"BSL-2"|"BSL-3"|"BSL-4"
+  accessibilityCompliance: "Full Barrier-Free Compliance"|"Partial Compliance"|"Standard"|"Not Applicable"
+  lightingQuality: "Standard"|"Enhanced"|"Specialist"|"Biodynamic / Circadian"
+  acousticControl: "Standard"|"Enhanced Acoustic Treatment"|"Full Acoustic Isolation"|"Not Applicable"
+  thermalOdorControl: "Standard HVAC"|"Enhanced Odour Extraction"|"Negative Pressure Odour Control"|"Not Applicable"
+  privacy: "Open Plan — No Privacy Screening"|"Partial Privacy — Curtains / Screens"|"Full Visual Privacy — Solid Partitions"|"Acoustic Privacy — Sound Attenuation"|"Full Privacy — Visual + Acoustic"
+  familyInteraction: "Not Applicable"|"Waiting Area Access Only"|"Bedside Family Zone"|"Family Participation in Care"|"Dedicated Family Room / Lounge"
+  visualEnvironment: "Standard — Neutral Palette, No Feature Treatment"|"Wayfinding Colour Coding — Departmental Colour Scheme"|"Artwork & Murals — Feature Wall or Ceiling"|"Nature-Inspired — Biophilic Imagery, Textures, Patterns"|"Full Sensory Environment — Colour + Art + Nature + Lighting"
+  biophiliaHealingEnvironment: "Not Applicable — No Biophilic Elements Required"|"Views to Nature — External Garden, Courtyard or Sky"|"Indoor Plants — Potted or Planter Arrangements"|"Living Wall — Vertical Green Feature"|"Natural Materials — Timber Accents, Stone Features"|"Nature-Inspired Artwork & Photographic Murals"|"Circadian / Biodynamic Lighting (Human-Centric Lighting)"|"Full Biophilic Design Package — Views + Plants + Materials + Biodynamic Light"
+  technologyInfotainment: "Not Required"|"Bedside Entertainment Screen — TV / Streaming"|"Patient Education & Information System"|"Digital Wayfinding Display (Corridor / Room Entry)"|"Interactive Patient Portal — Bedside Tablet / Screen"|"Smart Room Automation — Lighting, Climate & Blinds Control"|"Full Smart Room + Entertainment + Interactive Patient Portal"
+  infectionControlHygiene: "Standard — ABHR Dispenser at Entry (Staff & Visitor Accessible)"|"Enhanced — ABHR at Entry + Bedside + Toilet"|"Contactless Experience — Sensor Taps, Auto Doors, Touchless Dispensers"|"Visible Hygiene Stations — Prominently Positioned ABHR + Signage"|"Antimicrobial Surface Materials (Copper, Silver-Ion Finishes)"|"Full Hygiene-by-Design — Contactless + Antimicrobial + Seamless Surfaces + Signage"
+  lightingLevelStandard: "Not Specified"|"50–100 lux — Corridor / Low-activity"|"150–200 lux — General Ward / Waiting"|"300 lux — Standard Office / Admin"|"500 lux — Clinical / Examination"|"750 lux — Procedure Room"|"1000 lux — Operating / High-precision"|"Custom (specify in notes)"
+  lightingLevelTreatment: "Not Applicable"|"300 lux — General Task"|"500 lux — Clinical Examination"|"750–1000 lux — Procedure / Surgical Field"|"10 000–100 000 lux — Surgical Light (Examination Luminaire)"|"Custom (specify in notes)"
+- Lighting inference rules: if document mentions "dimmer" or "dimming" → lightingControl includes "Dimming Control"; "PIR" or "motion" → ctrlMotionSensor "Yes"; "photocell" or "daylight" → ctrlPhotosensor "Yes"; "BMS" or "touch panel" or "iPad" → ctrlLMS "Yes"; "T5" → lightFitT5Fluorescent "Yes"; "LED strip" → lightFitLEDStrip "Yes"; "downlight" or "down-light" → lightFitLEDDownlight "Yes"; "biophilic" or "stretch ceiling" → lightFitBiophilic "Yes"
+- Furniture inference rules: if document mentions "workstation" or "workbench" → furnitureSystemFurniture "Yes"; "locker" → furnitureLockers "Yes"; "whiteboard" or "marker board" → furnitureMarkerBoard "Yes"; "handrail" or "grab rail" → furnitureHandRail "Yes"; "countertop" or "bench top" → furnitureFixedBench "Yes"; "overhead cabinet" → cabOverheadCabinets "Yes"; "undercounter" → cabUndercountCabinets "Yes"; "full height cabinet" → cabFullHeightCabinets "Yes"; "mobile pedestal" → cabMobilePedestal "Yes"
+- Fume cupboard inference: if document mentions "fume hood" or "fume cupboard" → set the appropriate fumeFloorVertical/fumeWalkIn/fumePortable field to "Yes" based on size mentioned
 - Pay special attention to "roomFunction" which is typically at the top of the document
 - Return ONLY the JSON object, no markdown, no explanation`;
 
@@ -1039,6 +1122,22 @@ app.post("/extract", async (req, res) => {
 6. For select fields match closest option (e.g. "24/7" → "24×7", "negative" → "Negative (-ve)").
 
 7. Use 80-90% inference for unlisted fields when context is clear.
+
+8. INTERIOR LIGHTING — scan for any mention of lighting control, lux levels, dimming, switching, luminaire types, sensors, or lighting management systems. Map to:
+   - lightingControl: overall control strategy
+   - lightingLevelStandard / lightingLevelTreatment: lux requirements
+   - lightFit* fields: luminaire types present (Yes/No each)
+   - ctrl* fields: control device types present (Yes/No each)
+   - lightFittingNotes / lightingControlDeviceNotes / lightingLevelOther: any free-text lighting notes
+
+9. FURNITURE & CABINETRY — scan for any mention of benches, workstations, chairs, lockers, boards, handrails, cabinets, shelves, pedestals. Map to:
+   - furniture* fields: Yes/No for each furniture/fixture type
+   - cab* fields: Yes/No for each cabinetry/shelving type
+   - furnitureNotes / cabinetryNotes: any free-text notes
+
+10. FUME CUPBOARDS — scan for fume hood, fume cupboard, ductless hood mentions. Map to:
+    - fumeFloorVertical* / fumeWalkIn* / fumePortable* fields: Yes/No based on type and size (1200/1500/1800mm)
+    - fumeNotes: any additional fume cupboard specifications
 
 Document content:
 ${textContent.slice(0, 28000)}` }
