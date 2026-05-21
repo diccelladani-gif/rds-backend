@@ -228,9 +228,12 @@ const SECTIONS = [
   ]},
   { label: "12. Fittings, Fixtures & Equipment",      keys: [
       "airFlowmeter","oxygenFlowmeter","suctionAdapterLowFlow","suctionBottle","oxygenFlowmeterLowFlow",
-      "trolleyProcedure","blenderAirOxygen","stoolAdjustableMobile","curtainTrackSystem","ivHook","additionalFF",
+      "trolleyProcedure","blenderAirOxygen","stoolAdjustableMobile","curtainTrackSystem","ivHook",
+      "patientFurniture","staffVisitorFurniture","storageFurniture",
+      "wallMountedDispensers","wasteBins","additionalFF",
       "infusionPumpSyringe","examinationLight","physiologicMonitor","infantIncubator","phototherapyLamp",
-      "supplyUnitCeiling","infusionPumpEnteral","infusionPumpSingleChannel","ventilatorNeonatal","additionalFE"
+      "supplyUnitCeiling","infusionPumpEnteral","infusionPumpSingleChannel","ventilatorNeonatal",
+      "medicalEquipments","wallMountedDiagnostics","itCommunicationHardware","nurseCallSystems","additionalFE"
   ]},
   { label: "13. Waste Management",                    keys: [
       "wmBiohazard","wmRadioactive","wmFlammableSolvent","wmChemicalWaste","wmHumanAnatomical",
@@ -871,7 +874,7 @@ app.get("/export/pdf/:id", async (req, res) => {
 });
 
 // ─── AI EXTRACT ROUTE ─────────────────────────────────────
-const FIELD_LIST = `projectName,projectCode,type,department,departmentCode,category,categoryCode,roomName,roomCode,location,roomTypology,criticalityLevel,infectionRiskCategory,isolationType,netArea,minimumDimension,clearance,floorToSoffitHeight,floorToCeilingHeight,doorType,doorSize,accessibilityCompliance,hazardousStorage,radiationShielding,vibrationIsolation,magneticShielding,soundInsulation,rfShielding,equipmentMountingSupport,structuralFloorDrop,otherSpecialNeeds,constructionMatrix,floor,floorSpec,skirting,walls,wallsSpec,ceiling,ceilingSpec,wallProtection,wallProtectionNotes,internalGlazing,hatches,specialFinishes,doorConfig,windowConfig,sanitaryFittings,lightingControl,lightingControlNotes,lightingLevelStandard,lightingLevelTreatment,lightingLevelOther,lightFitT5Fluorescent,lightFitLEDTube,lightFitLEDStrip,lightFitCompactPL,lightFitLEDDownlight,lightFitBiophilic,lightFitCeilingLight,lightFitOthers,lightFittingNotes,ctrlOnOff,ctrlTimer,ctrlMotionSensor,ctrlPhotosensor,ctrlLMS,ctrlOthers,lightingControlDeviceNotes,furnitureLaboratoryBenches,furnitureSystemFurniture,furnitureLooseChairs,furnitureModularCabin,furnitureCustom,furnitureFixedBench,furnitureLockers,furnitureCoatHooks,furnitureBulletinBoard,furnitureMarkerBoard,furnitureHandRail,furnitureOthers,furnitureNotes,cabBuiltInIntegrated,cabMobilePedestal,cabOverheadCabinets,cabUndercountCabinets,cabOpenShelvesOverhead,cabOpenShelvesUnder,cabFullHeightCabinets,cabFullHeightShelving,cabInventoryStocked,cabOthers,cabinetryNotes,fumeFloorVertical1200,fumeFloorVertical1500,fumeFloorVertical1800,fumeWalkIn1200,fumeWalkIn1500,fumeWalkIn1800,fumePortable1200,fumePortable1500,fumePortable1800,fumeNotes,roomFunction,keyActivities,userGroups,operationalScenarios,patientZone,staffZone,equipmentZone,cleanZone,dirtyZone,patientFlow,staffFlow,materialFlow,entryPoints,restrictedZones,medicalGasMatrix,patientCapacity,staffRequirement,peakLoad,throughput,averageStayTime,surgeCapacity,operationalHours,mustBeAdjacent,shouldBeAdjacent,avoidAdjacency,airChangesACH,pressure,temperature,humidity,filtration,providedFanInRoom,airflowDirection,naturalVentilation,mechanicalVentilation,smokeExtraction,pandemicMode,powerLoad,normalPower,emergencyPower,ups,numberOfSockets,specialOutlets,ssoMatrix,isolatorMatrix,equip_dedicatedCircuit,equip_upsBackup,equip_vibrationIsolation,equip_bmsInterface,equip_isolatedGrounding,equip_humidityControl,equip_remoteMonitoring,equip_voltageStabilizer,equip_antiStaticFlooring,equip_fireRatedEnclosure,equip_fireAlarmInterface,equip_gasDetection,oxygen,medicalAir,vacuum,nitrousOxide,handWash,wc,shower,plumbingSpecialSystems,hisEmr,pacs,lis,rtls,nurseCall,cctv,iotSensors,aiAnalytics,elvMatrix,itAccessories,coreSafetyMatrix,infectionControlMatrix,plumbingFixturesMatrix,fireLifeSafetyMatrix,electricalSafetyMatrix,physicalSecurityMatrix,chemHazardMatrix,safetyAdditionalNotes,pressureRegime,isolationLevel,radiationProtection,biohazardHandling,fireSafety,emergencySystems,lightingQuality,lightingNotes,acousticControl,acousticNotes,thermalOdorControl,thermalOdorNotes,patientComfort,patientComfortNotes,privacy,familyInteraction,familyInteractionNotes,visualEnvironment,visualEnvironmentNotes,biophiliaHealingEnvironment,biophiliaHealingNotes,technologyInfotainment,technologyInfotainmentNotes,infectionControlHygiene,infectionControlHygieneNotes,airFlowmeter,oxygenFlowmeter,suctionAdapterLowFlow,suctionBottle,oxygenFlowmeterLowFlow,trolleyProcedure,blenderAirOxygen,stoolAdjustableMobile,curtainTrackSystem,ivHook,additionalFF,infusionPumpSyringe,examinationLight,physiologicMonitor,infantIncubator,phototherapyLamp,supplyUnitCeiling,infusionPumpEnteral,infusionPumpSingleChannel,ventilatorNeonatal,additionalFE,wmBiohazard,wmRadioactive,wmFlammableSolvent,wmChemicalWaste,wmHumanAnatomical,wmMicrobiologyWaste,wmWasteSharps,wmCytotoxicDrugs,wmSoiledWaste,wmSolidWaste,wmLiquidWaste,wmDiscardedContainers,wmUsedOil,wmEwaste,wmConfidentialPaper,wmFoodPantryWaste,wmOthers1,wmOthers2,wmNotes`;
+const FIELD_LIST = `projectName,projectCode,type,department,departmentCode,category,categoryCode,roomName,roomCode,location,roomTypology,criticalityLevel,infectionRiskCategory,isolationType,netArea,minimumDimension,clearance,floorToSoffitHeight,floorToCeilingHeight,doorType,doorSize,accessibilityCompliance,hazardousStorage,radiationShielding,vibrationIsolation,magneticShielding,soundInsulation,rfShielding,equipmentMountingSupport,structuralFloorDrop,otherSpecialNeeds,constructionMatrix,floor,floorSpec,skirting,walls,wallsSpec,ceiling,ceilingSpec,wallProtection,wallProtectionNotes,internalGlazing,hatches,specialFinishes,doorConfig,windowConfig,sanitaryFittings,lightingControl,lightingControlNotes,lightingLevelStandard,lightingLevelTreatment,lightingLevelOther,lightFitT5Fluorescent,lightFitLEDTube,lightFitLEDStrip,lightFitCompactPL,lightFitLEDDownlight,lightFitBiophilic,lightFitCeilingLight,lightFitOthers,lightFittingNotes,ctrlOnOff,ctrlTimer,ctrlMotionSensor,ctrlPhotosensor,ctrlLMS,ctrlOthers,lightingControlDeviceNotes,furnitureLaboratoryBenches,furnitureSystemFurniture,furnitureLooseChairs,furnitureModularCabin,furnitureCustom,furnitureFixedBench,furnitureLockers,furnitureCoatHooks,furnitureBulletinBoard,furnitureMarkerBoard,furnitureHandRail,furnitureOthers,furnitureNotes,cabBuiltInIntegrated,cabMobilePedestal,cabOverheadCabinets,cabUndercountCabinets,cabOpenShelvesOverhead,cabOpenShelvesUnder,cabFullHeightCabinets,cabFullHeightShelving,cabInventoryStocked,cabOthers,cabinetryNotes,fumeFloorVertical1200,fumeFloorVertical1500,fumeFloorVertical1800,fumeWalkIn1200,fumeWalkIn1500,fumeWalkIn1800,fumePortable1200,fumePortable1500,fumePortable1800,fumeNotes,roomFunction,keyActivities,userGroups,operationalScenarios,patientZone,staffZone,equipmentZone,cleanZone,dirtyZone,patientFlow,staffFlow,materialFlow,entryPoints,restrictedZones,medicalGasMatrix,patientCapacity,staffRequirement,peakLoad,throughput,averageStayTime,surgeCapacity,operationalHours,mustBeAdjacent,shouldBeAdjacent,avoidAdjacency,airChangesACH,pressure,temperature,humidity,filtration,providedFanInRoom,airflowDirection,naturalVentilation,mechanicalVentilation,smokeExtraction,pandemicMode,powerLoad,normalPower,emergencyPower,ups,numberOfSockets,specialOutlets,ssoMatrix,isolatorMatrix,equip_dedicatedCircuit,equip_upsBackup,equip_vibrationIsolation,equip_bmsInterface,equip_isolatedGrounding,equip_humidityControl,equip_remoteMonitoring,equip_voltageStabilizer,equip_antiStaticFlooring,equip_fireRatedEnclosure,equip_fireAlarmInterface,equip_gasDetection,oxygen,medicalAir,vacuum,nitrousOxide,handWash,wc,shower,plumbingSpecialSystems,hisEmr,pacs,lis,rtls,nurseCall,cctv,iotSensors,aiAnalytics,elvMatrix,itAccessories,coreSafetyMatrix,infectionControlMatrix,plumbingFixturesMatrix,fireLifeSafetyMatrix,electricalSafetyMatrix,physicalSecurityMatrix,chemHazardMatrix,safetyAdditionalNotes,pressureRegime,isolationLevel,radiationProtection,biohazardHandling,fireSafety,emergencySystems,lightingQuality,lightingNotes,acousticControl,acousticNotes,thermalOdorControl,thermalOdorNotes,patientComfort,patientComfortNotes,privacy,familyInteraction,familyInteractionNotes,visualEnvironment,visualEnvironmentNotes,biophiliaHealingEnvironment,biophiliaHealingNotes,technologyInfotainment,technologyInfotainmentNotes,infectionControlHygiene,infectionControlHygieneNotes,airFlowmeter,oxygenFlowmeter,suctionAdapterLowFlow,suctionBottle,oxygenFlowmeterLowFlow,trolleyProcedure,blenderAirOxygen,stoolAdjustableMobile,curtainTrackSystem,ivHook,patientFurniture,staffVisitorFurniture,storageFurniture,wallMountedDispensers,wasteBins,additionalFF,infusionPumpSyringe,examinationLight,physiologicMonitor,infantIncubator,phototherapyLamp,supplyUnitCeiling,infusionPumpEnteral,infusionPumpSingleChannel,ventilatorNeonatal,medicalEquipments,wallMountedDiagnostics,itCommunicationHardware,nurseCallSystems,additionalFE,wmBiohazard,wmRadioactive,wmFlammableSolvent,wmChemicalWaste,wmHumanAnatomical,wmMicrobiologyWaste,wmWasteSharps,wmCytotoxicDrugs,wmSoiledWaste,wmSolidWaste,wmLiquidWaste,wmDiscardedContainers,wmUsedOil,wmEwaste,wmConfidentialPaper,wmFoodPantryWaste,wmOthers1,wmOthers2,wmNotes`;
 
 const SYSTEM_PROMPT = `You are an expert at extracting Room Data Sheet (RDS) data from documents.
 Extract values and return ONLY a valid JSON object using ONLY these exact keys where data is found:
@@ -1106,11 +1109,29 @@ app.post("/extract", async (req, res) => {
 
 2. "roomFunction" field: Extract ALL bullet points / activity lines. Join with semicolons. Do not truncate.
 
-3. "additionalFF" field: Extract ALL items from Fittings and Furniture table as: "Code: Description xQty" joined with semicolons.
+3. "patientFurniture" field: Extract all patient furniture items (beds, over-bed tables, bedside lockers, recliners) as a descriptive string.
 
-4. "additionalFE" field: Extract ALL items from Fixtures/Equipment table as: "Code: Description xQty" joined with semicolons.
+4. "staffVisitorFurniture" field: Extract all staff and visitor furniture items (chairs, desks, workstations) as a descriptive string.
 
-5. Numeric conversions — these values may appear as text like "One (1)", "1 No.", "2 Nos." — always extract as a plain number:
+5. "storageFurniture" field: Extract all storage items (trolleys, cabinets, shelving) as a descriptive string.
+
+6. "wallMountedDispensers" field: Extract all dispenser items (sanitiser, soap, paper towel, glove dispensers) as a descriptive string.
+
+7. "wasteBins" field: Extract all waste bin/container items (clinical, general, sharps containers) as a descriptive string.
+
+8. "additionalFF" field: Extract any remaining fittings/furniture items not captured above as: "Code: Description xQty" joined with semicolons.
+
+9. "wallMountedDiagnostics" field: Extract wall-mounted diagnostic items (sphygmomanometer, pulse oximeter, ophthalmoscope) as a descriptive string.
+
+10. "itCommunicationHardware" field: Extract IT/comms hardware (PC, monitor, scanner, printer, VOIP, network points) as a descriptive string.
+
+11. "nurseCallSystems" field: Extract nurse call/emergency call items (bedhead unit, pull cord, annunciator) as a descriptive string.
+
+12. "medicalEquipments" field: Extract all other medical equipment items (ECG, ultrasound, defibrillator) as a descriptive string.
+
+13. "additionalFE" field: Extract any remaining fixture/equipment items not captured above as: "Code: Description xQty" joined with semicolons.
+
+14. Numeric conversions — these values may appear as text like "One (1)", "1 No.", "2 Nos." — always extract as a plain number, never negative:
    netArea, patientCapacity, staffRequirement, peakLoad, powerLoad, numberOfSockets,
    oxygen, medicalAir, vacuum, nitrousOxide, handWash, wc, shower, ceilingHeight,
    airFlowmeter, oxygenFlowmeter, suctionAdapterLowFlow, suctionBottle,
@@ -1119,23 +1140,23 @@ app.post("/extract", async (req, res) => {
    infantIncubator, phototherapyLamp, supplyUnitCeiling, infusionPumpEnteral,
    infusionPumpSingleChannel, ventilatorNeonatal
 
-6. For select fields match closest option (e.g. "24/7" → "24×7", "negative" → "Negative (-ve)").
+15. For select fields match closest option (e.g. "24/7" → "24×7", "negative" → "Negative (-ve)").
 
-7. Use 80-90% inference for unlisted fields when context is clear.
+16. Use 80-90% inference for unlisted fields when context is clear.
 
-8. INTERIOR LIGHTING — scan for any mention of lighting control, lux levels, dimming, switching, luminaire types, sensors, or lighting management systems. Map to:
+17. INTERIOR LIGHTING — scan for any mention of lighting control, lux levels, dimming, switching, luminaire types, sensors, or lighting management systems. Map to:
    - lightingControl: overall control strategy
    - lightingLevelStandard / lightingLevelTreatment: lux requirements
    - lightFit* fields: luminaire types present (Yes/No each)
    - ctrl* fields: control device types present (Yes/No each)
    - lightFittingNotes / lightingControlDeviceNotes / lightingLevelOther: any free-text lighting notes
 
-9. FURNITURE & CABINETRY — scan for any mention of benches, workstations, chairs, lockers, boards, handrails, cabinets, shelves, pedestals. Map to:
+18. FURNITURE & CABINETRY — scan for any mention of benches, workstations, chairs, lockers, boards, handrails, cabinets, shelves, pedestals. Map to:
    - furniture* fields: Yes/No for each furniture/fixture type
    - cab* fields: Yes/No for each cabinetry/shelving type
    - furnitureNotes / cabinetryNotes: any free-text notes
 
-10. FUME CUPBOARDS — scan for fume hood, fume cupboard, ductless hood mentions. Map to:
+19. FUME CUPBOARDS — scan for fume hood, fume cupboard, ductless hood mentions. Map to:
     - fumeFloorVertical* / fumeWalkIn* / fumePortable* fields: Yes/No based on type and size (1200/1500/1800mm)
     - fumeNotes: any additional fume cupboard specifications
 
