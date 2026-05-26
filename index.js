@@ -1177,6 +1177,391 @@ ${textContent.slice(0, 28000)}` }
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AI VALIDATION ENGINE — paste this block into backend/index.js
+// PLACE IT just before the "404 / ERROR" section at the bottom of index.js
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// SETUP REQUIRED:
+//   1. npm install node-fetch  (if not already installed)
+//   2. Add to Render env vars:  TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxx
+//   3. Run this SQL in Supabase:
+//        CREATE TABLE IF NOT EXISTS rds_validations (
+//          id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+//          room_id     text NOT NULL,
+//          room_code   text,
+//          report      jsonb,
+//          created_at  timestamptz DEFAULT now()
+//        );
+// ─────────────────────────────────────────────────────────────────────────────
+
+const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
+
+// ── 13 Agent Definitions ──────────────────────────────────────────────────────
+const AGENT_CONFIGS = [
+  {
+    id: 1,
+    section: "Room Identity & General Information",
+    searchQueries: (data) => [
+      `hospital room classification standards ${data.roomTypology || "clinical room"} 2025`,
+      `room coding standards healthcare facility planning India international`
+    ],
+    systemPrompt: `You are a senior healthcare facility planner specializing in room classification and identity standards (HTM, HBN, FGI, NABH, JCI). Validate room identity fields and suggest improvements based on current standards.`
+  },
+  {
+    id: 2,
+    section: "Architectural & Spatial Requirements",
+    searchQueries: (data) => [
+      `${data.roomTypology || "hospital room"} minimum area clearance requirements FGI guidelines 2022`,
+      `hospital room door types accessibility compliance ADA NABH standards 2025`
+    ],
+    systemPrompt: `You are an expert healthcare architect specializing in clinical space planning (FGI Guidelines, HTM, HBN, IS codes). Validate spatial requirements and suggest compliance improvements.`
+  },
+  {
+    id: 3,
+    section: "Interior Finishes & Aesthetics",
+    searchQueries: (data) => [
+      `best hospital flooring materials ${data.roomTypology || "clinical"} room 2025 infection control`,
+      `latest hospital interior finishes wall ceiling materials antimicrobial sustainable 2025`
+    ],
+    systemPrompt: `You are an expert in healthcare interior specifications — flooring, walls, ceilings, infection control finishes. Validate material choices and suggest modern alternatives with clinical rationale.`
+  },
+  {
+    id: 4,
+    section: "Interior Lighting & Furniture",
+    searchQueries: (data) => [
+      `hospital lighting standards ${data.roomTypology || "clinical room"} lux levels LED 2025`,
+      `healthcare furniture latest ergonomic clinical furniture standards 2025`
+    ],
+    systemPrompt: `You are a healthcare lighting and furniture specialist (CIBSE, IES, HTM 08-03). Validate lighting levels, control strategies, and furniture specifications. Suggest modern LED, circadian, and ergonomic alternatives.`
+  },
+  {
+    id: 5,
+    section: "Clinical Functionality & Workflow",
+    searchQueries: (data) => [
+      `${data.roomTypology || "hospital room"} clinical workflow best practices zones 2025`,
+      `lean healthcare design workflow optimization clinical spaces latest`
+    ],
+    systemPrompt: `You are a clinical workflow and healthcare operations expert. Validate functional zones, patient/staff flow, and workflow design against current evidence-based design principles.`
+  },
+  {
+    id: 6,
+    section: "Capacity & Operations",
+    searchQueries: (data) => [
+      `${data.roomTypology || "hospital room"} capacity staffing ratio standards 2025`,
+      `healthcare operational hours surge capacity planning best practices`
+    ],
+    systemPrompt: `You are a healthcare operations planning expert. Validate capacity, staffing, and operational parameters against current benchmarks and staffing ratio guidelines.`
+  },
+  {
+    id: 7,
+    section: "Adjacency Matrix",
+    searchQueries: (data) => [
+      `${data.roomTypology || "hospital room"} adjacency requirements spatial planning hospital design`,
+      `healthcare department adjacency matrix best practices infection control workflow`
+    ],
+    systemPrompt: `You are a hospital master planner specializing in departmental adjacency and space relationships. Validate adjacency requirements and suggest optimizations for workflow and infection control.`
+  },
+  {
+    id: 8,
+    section: "MEP & Engineering Systems",
+    searchQueries: (data) => [
+      `${data.roomTypology || "hospital room"} HVAC ACH pressure requirements ASHRAE 170 2025`,
+      `hospital medical gas electrical systems latest standards energy efficiency 2025`
+    ],
+    systemPrompt: `You are a senior MEP engineer specializing in healthcare facilities (ASHRAE 170, HTM 02-01, NBC India). Validate HVAC, electrical, medical gas, and plumbing specifications. Suggest energy-efficient modern alternatives.`
+  },
+  {
+    id: 9,
+    section: "Digital & Smart Systems",
+    searchQueries: (data) => [
+      `hospital smart room technology IoT systems ${data.roomTypology || "clinical"} 2025`,
+      `healthcare digital systems HIS EMR RTLS nurse call latest innovations 2025`
+    ],
+    systemPrompt: `You are a healthcare IT and smart building specialist. Validate digital system specifications and suggest the latest smart room technologies, IoT integrations, and digital health innovations.`
+  },
+  {
+    id: 10,
+    section: "Safety & Infection Control",
+    searchQueries: (data) => [
+      `hospital infection control ${data.roomTypology || "clinical room"} latest standards 2025 WHO CDC`,
+      `healthcare safety standards fire life safety infection prevention latest guidelines`
+    ],
+    systemPrompt: `You are an infection control and patient safety specialist (WHO, CDC, NABH, JCI). Validate safety and infection control measures and suggest evidence-based improvements aligned with latest guidelines.`
+  },
+  {
+    id: 11,
+    section: "Stakeholder Experience",
+    searchQueries: (data) => [
+      `patient experience design hospital room ${data.roomTypology || "clinical"} biophilic healing environment 2025`,
+      `healthcare acoustic thermal comfort patient satisfaction design latest research`
+    ],
+    systemPrompt: `You are a healthcare design researcher specializing in evidence-based design and patient experience (HERD journal, Planetree, Magnet). Validate comfort, privacy, and wellbeing provisions and suggest improvements.`
+  },
+  {
+    id: 12,
+    section: "Fittings, Fixtures & Equipment",
+    searchQueries: (data) => [
+      `${data.roomTypology || "hospital room"} medical equipment fittings latest technology 2025`,
+      `hospital room fixtures medical gas outlets nurse call pendant ceiling supply units latest`
+    ],
+    systemPrompt: `You are a clinical equipment planner and biomedical engineer. Validate fittings, fixtures, and equipment specifications. Suggest modern clinical equipment alternatives and technology upgrades.`
+  },
+  {
+    id: 13,
+    section: "Waste Management",
+    searchQueries: (data) => [
+      `hospital biomedical waste management ${data.roomTypology || "clinical room"} latest rules 2025 India`,
+      `healthcare waste segregation disposal latest technology sustainable practices 2025`
+    ],
+    systemPrompt: `You are a biomedical waste management specialist (BMW Rules 2016, WHO guidelines). Validate waste management provisions and suggest improvements aligned with latest regulations and sustainable practices.`
+  }
+];
+
+// ── Tavily Web Search ─────────────────────────────────────────────────────────
+async function tavilySearch(query) {
+  const TAVILY_KEY = process.env.TAVILY_API_KEY;
+  if (!TAVILY_KEY) return [];
+  try {
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: TAVILY_KEY,
+        query,
+        search_depth: "basic",
+        max_results: 3,
+        include_answer: true
+      })
+    });
+    const json = await res.json();
+    return (json.results || []).map(r => ({
+      title: r.title,
+      url: r.url,
+      snippet: r.content?.slice(0, 300)
+    }));
+  } catch (e) {
+    console.warn(`Tavily search failed for "${query}":`, e.message);
+    return [];
+  }
+}
+
+// ── Run one section agent ─────────────────────────────────────────────────────
+async function runSectionAgent(agentConfig, sectionData, roomContext, groq) {
+  // 1. Web search — run both queries in parallel
+  const searchResults = await Promise.all(
+    agentConfig.searchQueries(roomContext).map(q => tavilySearch(q))
+  );
+  const allResults = searchResults.flat().slice(0, 5);
+  const searchContext = allResults.length
+    ? allResults.map(r => `• ${r.title}: ${r.snippet}`).join("\n")
+    : "No web search results available.";
+
+  // 2. Build prompt
+  const prompt = `
+ROOM CONTEXT:
+- Room Name: ${roomContext.roomName || "Unknown"}
+- Room Type: ${roomContext.roomTypology || "Unknown"}
+- Department: ${roomContext.department || "Unknown"}
+- Criticality: ${roomContext.criticalityLevel || "Unknown"}
+
+SECTION: ${agentConfig.section}
+SECTION DATA (what the user filled):
+${JSON.stringify(sectionData, null, 2)}
+
+LATEST INDUSTRY RESEARCH (from web):
+${searchContext}
+
+TASK:
+1. Validate each filled field — is it appropriate for this room type?
+2. Identify outdated specs, missing items, or compliance gaps.
+3. Suggest specific modern alternatives with clinical reasoning.
+4. Give an overall confidence/quality score 0-100.
+
+Respond ONLY with this exact JSON (no markdown, no extra text):
+{
+  "valid": true or false,
+  "confidence": <number 0-100>,
+  "summary": "<2 sentence overall assessment>",
+  "issues": [
+    { "field": "<fieldName>", "current": "<current value>", "problem": "<what's wrong or outdated>" }
+  ],
+  "suggestions": [
+    { "field": "<fieldName or topic>", "recommendation": "<specific suggestion>", "reason": "<clinical/technical rationale>", "priority": "High|Medium|Low" }
+  ],
+  "sources": [
+    { "title": "<source title>", "url": "<url>" }
+  ]
+}`;
+
+  // 3. Call Groq
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    max_tokens: 1200,
+    temperature: 0.3,
+    messages: [
+      { role: "system", content: agentConfig.systemPrompt },
+      { role: "user", content: prompt }
+    ]
+  });
+
+  const raw = completion.choices[0]?.message?.content || "{}";
+  const cleaned = raw.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
+
+  try {
+    const result = JSON.parse(cleaned);
+    return {
+      sectionId: agentConfig.id,
+      section: agentConfig.section,
+      ...result,
+      sources: [...(result.sources || []), ...allResults.map(r => ({ title: r.title, url: r.url }))]
+        .filter((s, i, arr) => s.url && arr.findIndex(x => x.url === s.url) === i)
+        .slice(0, 4)
+    };
+  } catch {
+    return {
+      sectionId: agentConfig.id,
+      section: agentConfig.section,
+      valid: true,
+      confidence: 50,
+      summary: "Validation completed with limited analysis.",
+      issues: [],
+      suggestions: [],
+      sources: allResults.map(r => ({ title: r.title, url: r.url }))
+    };
+  }
+}
+
+// ── Extract section data from full room data ──────────────────────────────────
+function extractSectionData(fullData, sectionKeys) {
+  const result = {};
+  sectionKeys.forEach(k => {
+    if (fullData[k] !== undefined && fullData[k] !== null && fullData[k] !== "") {
+      result[k] = fullData[k];
+    }
+  });
+  return result;
+}
+
+// ── POST /validate-rds ────────────────────────────────────────────────────────
+app.post("/validate-rds", async (req, res) => {
+  try {
+    const { roomId } = req.body;
+    if (!roomId) return res.status(400).json({ error: "roomId is required" });
+
+    const GROQ_KEY = process.env.GROQ_API_KEY;
+    if (!GROQ_KEY) return res.status(500).json({ error: "GROQ_API_KEY not set" });
+
+    // Fetch room from Supabase
+    const { data: room, error: fetchError } = await supabase
+      .from("rds_rooms")
+      .select("*")
+      .eq("id", String(roomId))
+      .single();
+
+    if (fetchError || !room) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+
+    const fullData = typeof room.data === "string" ? safeJson(room.data) : (room.data || {});
+    const groq = new Groq({ apiKey: GROQ_KEY });
+
+    const roomContext = {
+      roomName:        fullData.roomName        || room.roomname     || "",
+      roomTypology:    fullData.roomTypology     || "",
+      department:      fullData.department       || room.department   || "",
+      criticalityLevel: fullData.criticalityLevel || "",
+      roomCode:        fullData.roomCode         || room.roomcode     || ""
+    };
+
+    console.log(`[Validation] Starting 13-agent validation for room ${roomContext.roomCode}...`);
+
+    // Run all 13 agents in parallel
+    const agentPromises = AGENT_CONFIGS.map((agentConfig, idx) => {
+      const sectionDef  = SECTIONS[idx];
+      const sectionData = sectionDef
+        ? extractSectionData(fullData, sectionDef.keys)
+        : {};
+      return runSectionAgent(agentConfig, sectionData, roomContext, groq)
+        .catch(err => ({
+          sectionId: agentConfig.id,
+          section:   agentConfig.section,
+          valid:     true,
+          confidence: 40,
+          summary:   `Agent encountered an error: ${err.message}`,
+          issues:    [],
+          suggestions: [],
+          sources:   []
+        }));
+    });
+
+    const sectionResults = await Promise.all(agentPromises);
+    console.log(`[Validation] All 13 agents completed for ${roomContext.roomCode}`);
+
+    // Consolidate report
+    const totalConfidence   = Math.round(sectionResults.reduce((s, r) => s + (r.confidence || 0), 0) / 13);
+    const totalIssues       = sectionResults.reduce((s, r) => s + (r.issues?.length || 0), 0);
+    const totalSuggestions  = sectionResults.reduce((s, r) => s + (r.suggestions?.length || 0), 0);
+    const highPriority      = sectionResults.flatMap(r => r.suggestions || []).filter(s => s.priority === "High").length;
+
+    const report = {
+      roomId:       String(roomId),
+      roomCode:     roomContext.roomCode,
+      roomName:     roomContext.roomName,
+      roomTypology: roomContext.roomTypology,
+      department:   roomContext.department,
+      validatedAt:  new Date().toISOString(),
+      overallScore: totalConfidence,
+      overallStatus: totalConfidence >= 80 ? "Excellent" : totalConfidence >= 60 ? "Good" : totalConfidence >= 40 ? "Needs Review" : "Critical",
+      summary: {
+        totalIssues,
+        totalSuggestions,
+        highPriorityCount: highPriority,
+        sectionsValidated: 13
+      },
+      sections: sectionResults
+    };
+
+    // Save to Supabase rds_validations
+    try {
+      await supabase.from("rds_validations").insert({
+        room_id:   String(roomId),
+        room_code: roomContext.roomCode,
+        report:    report,
+        created_at: new Date().toISOString()
+      });
+    } catch (saveErr) {
+      console.warn("Could not save validation to Supabase:", saveErr.message);
+      // Non-blocking — still return the report
+    }
+
+    console.log(`[Validation] ✓ Score=${totalConfidence} Issues=${totalIssues} Suggestions=${totalSuggestions}`);
+    res.json(report);
+
+  } catch (e) {
+    console.error("Validation error:", e);
+    res.status(500).json({ error: "Validation failed: " + e.message });
+  }
+});
+
+// GET /validate-rds/:roomId — fetch saved validation report
+app.get("/validate-rds/:roomId", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("rds_validations")
+      .select("*")
+      .eq("room_id", req.params.roomId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !data) return res.status(404).json({ error: "No validation found" });
+    res.json(data.report);
+  } catch {
+    res.status(500).json({ error: "Failed to fetch validation" });
+  }
+});
+
 // ─── 404 / ERROR ─────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ error: "Route not found" }));
 app.use((err, _req, res, _next) => {
