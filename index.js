@@ -1195,6 +1195,24 @@ ${textContent.slice(0, 28000)}` }
 //        );
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AI VALIDATION ENGINE — paste this block into backend/index.js
+// PLACE IT just before the "404 / ERROR" section at the bottom of index.js
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// SETUP REQUIRED:
+//   1. npm install node-fetch  (if not already installed)
+//   2. Add to Render env vars:  TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxx
+//   3. Run this SQL in Supabase:
+//        CREATE TABLE IF NOT EXISTS rds_validations (
+//          id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+//          room_id     text NOT NULL,
+//          room_code   text,
+//          report      jsonb,
+//          created_at  timestamptz DEFAULT now()
+//        );
+// ─────────────────────────────────────────────────────────────────────────────
+
 const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
 
 // ── 13 Agent Definitions ──────────────────────────────────────────────────────
@@ -1522,17 +1540,24 @@ app.post("/validate-rds", async (req, res) => {
       sections: sectionResults
     };
 
-    // Save to Supabase rds_validations
-    try {
-      await supabase.from("rds_validations").insert({
-        room_id:   String(roomId),
-        room_code: roomContext.roomCode,
-        report:    report,
-        created_at: new Date().toISOString()
-      });
-    } catch (saveErr) {
-      console.warn("Could not save validation to Supabase:", saveErr.message);
-      // Non-blocking — still return the report
+    // Save to Supabase rds_validations — upsert so re-runs overwrite old report
+    const { error: saveErr } = await supabase
+      .from("rds_validations")
+      .upsert(
+        {
+          room_id:    String(roomId),
+          room_code:  roomContext.roomCode,
+          report:     report,
+          created_at: new Date().toISOString()
+        },
+        { onConflict: "room_id" }   // update existing row if room_id already exists
+      );
+
+    if (saveErr) {
+      // Log the full error so you can see it in Render logs
+      console.error("[Validation] Supabase save FAILED:", JSON.stringify(saveErr));
+    } else {
+      console.log("[Validation] ✓ Report saved to rds_validations for room_id:", String(roomId));
     }
 
     console.log(`[Validation] ✓ Score=${totalConfidence} Issues=${totalIssues} Suggestions=${totalSuggestions}`);
@@ -1552,12 +1577,18 @@ app.get("/validate-rds/:roomId", async (req, res) => {
       .select("*")
       .eq("room_id", req.params.roomId)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);          // NO .single() — avoids throwing when empty
 
-    if (error || !data) return res.status(404).json({ error: "No validation found" });
-    res.json(data.report);
-  } catch {
+    if (error) {
+      console.error("[Validation] GET error:", JSON.stringify(error));
+      return res.status(500).json({ error: "Database error: " + error.message });
+    }
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: "No validation found" });
+    }
+    res.json(data[0].report);
+  } catch (e) {
+    console.error("[Validation] GET exception:", e.message);
     res.status(500).json({ error: "Failed to fetch validation" });
   }
 });
