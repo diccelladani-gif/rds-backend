@@ -1195,147 +1195,243 @@ ${textContent.slice(0, 28000)}` }
 //        );
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AI VALIDATION ENGINE — paste this block into backend/index.js
-// PLACE IT just before the "404 / ERROR" section at the bottom of index.js
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// SETUP REQUIRED:
-//   1. npm install node-fetch  (if not already installed)
-//   2. Add to Render env vars:  TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxx
-//   3. Run this SQL in Supabase:
-//        CREATE TABLE IF NOT EXISTS rds_validations (
-//          id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-//          room_id     text NOT NULL,
-//          room_code   text,
-//          report      jsonb,
-//          created_at  timestamptz DEFAULT now()
-//        );
-// ─────────────────────────────────────────────────────────────────────────────
-
 const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
-
+ 
 // ── 13 Agent Definitions ──────────────────────────────────────────────────────
 const AGENT_CONFIGS = [
   {
     id: 1,
     section: "Room Identity & General Information",
     searchQueries: (data) => [
-      `hospital room classification standards ${data.roomTypology || "clinical room"} 2025`,
-      `room coding standards healthcare facility planning India international`
+      `hospital ${data.roomTypology || "clinical room"} criticality infection risk classification standards NABH JCI 2025`,
+      `isolation type ${data.isolationType || "clinical room"} hospital infection control standards India 2025`
     ],
-    systemPrompt: `You are a senior healthcare facility planner specializing in room classification and identity standards (HTM, HBN, FGI, NABH, JCI). Validate room identity fields and suggest improvements based on current standards.`
+    systemPrompt: `You are a senior healthcare facility planner specializing in clinical classification standards (NABH, JCI, HTM, HBN, FGI).
+ 
+IMPORTANT SCOPE RULE: This section has two subsections — "Project & Room Identification" (projectName, projectCode, type, department, departmentCode, category, categoryCode, roomName, roomCode) and "Clinical Classification" (criticalityLevel, infectionRiskCategory, isolationType).
+ 
+You MUST ONLY validate and suggest improvements for the CLINICAL CLASSIFICATION fields: criticalityLevel, infectionRiskCategory, and isolationType. Do NOT comment on or suggest changes to any Project & Room Identification fields — those are user-defined administrative codes.
+ 
+For the three clinical classification fields, validate whether the selected values are appropriate for the room type, check for mismatches (e.g. a critical care room with Low criticality), and suggest better options with clinical rationale. Always include "In place of X, consider Y because..." style replacement suggestions.`
   },
   {
     id: 2,
     section: "Architectural & Spatial Requirements",
     searchQueries: (data) => [
-      `${data.roomTypology || "hospital room"} minimum area clearance requirements FGI guidelines 2022`,
-      `hospital room door types accessibility compliance ADA NABH standards 2025`
+      `${data.roomTypology || "hospital room"} net area minimum dimensions clearance FGI guidelines NABH 2025`,
+      `hospital ${data.roomTypology || "clinical"} room door type acoustic wall construction standards 2025`
     ],
-    systemPrompt: `You are an expert healthcare architect specializing in clinical space planning (FGI Guidelines, HTM, HBN, IS codes). Validate spatial requirements and suggest compliance improvements.`
+    systemPrompt: `You are an expert healthcare architect specializing in clinical space planning per FGI Guidelines 2022, HTM, HBN, NABH, and NBC India.
+ 
+Analyse ALL filled fields across ALL subsections of this section:
+- Spatial Requirements: netArea, minimumDimension, clearance, floorToSoffitHeight, floorToCeilingHeight, doorType, doorSize, accessibilityCompliance
+- Special Construction: hazardousStorage, radiationShielding, vibrationIsolation, magneticShielding, soundInsulation, rfShielding, equipmentMountingSupport, structuralFloorDrop, otherSpecialNeeds
+- Construction Details (constructionMatrix): wall types (wall1–wall4), ceiling, floor, skirting, visionPanel, acoustics — validate materials for each element
+ 
+For every filled field, check compliance with current standards. For every issue or outdated choice, always include: "In place of [current], consider [modern alternative] because [clinical/technical reason]." Cover the entire section, not just one part.`
   },
   {
     id: 3,
     section: "Interior Finishes & Aesthetics",
     searchQueries: (data) => [
-      `best hospital flooring materials ${data.roomTypology || "clinical"} room 2025 infection control`,
-      `latest hospital interior finishes wall ceiling materials antimicrobial sustainable 2025`
+      `best hospital flooring wall ceiling finishes ${data.roomTypology || "clinical room"} infection control antimicrobial 2025`,
+      `hospital door window sanitary fittings wall protection latest standards healthcare design 2025`
     ],
-    systemPrompt: `You are an expert in healthcare interior specifications — flooring, walls, ceilings, infection control finishes. Validate material choices and suggest modern alternatives with clinical rationale.`
+    systemPrompt: `You are an expert in healthcare interior specifications — finishes, surfaces, infection control, doors, windows, and sanitary fittings.
+ 
+Analyse ALL filled fields across ALL subsections:
+- Room Finishes: floor, floorSpec, skirting, walls, wallsSpec, ceiling, ceilingSpec — validate material suitability for room type and infection risk
+- Wall Protection & Surface Features: wallProtection, wallProtectionNotes, internalGlazing, hatches, specialFinishes
+- Doors (doorConfig): door type, size, material, fire rating, access control hardware
+- Windows (windowConfig): exterior and internal viewing windows, glazing type, provisions
+- Sanitary Fittings (sanitaryFittings): all selected fittings for clinical appropriateness
+ 
+For every field with a value, assess whether current choices meet modern healthcare standards. Always suggest: "In place of [current finish/material], consider [modern alternative] — e.g. instead of standard vinyl, specify Heterogeneous PUR-coated vinyl with welded seams and integral coved skirting for full infection control." Compare against latest global materials available in 2025.`
   },
   {
     id: 4,
     section: "Interior Lighting & Furniture",
     searchQueries: (data) => [
-      `hospital lighting standards ${data.roomTypology || "clinical room"} lux levels LED 2025`,
-      `healthcare furniture latest ergonomic clinical furniture standards 2025`
+      `hospital ${data.roomTypology || "clinical room"} lighting lux levels LED circadian tunable white CIBSE HTM 08-03 2025`,
+      `healthcare cabinetry furniture fume cupboard ergonomic clinical standards latest 2025`
     ],
-    systemPrompt: `You are a healthcare lighting and furniture specialist (CIBSE, IES, HTM 08-03). Validate lighting levels, control strategies, and furniture specifications. Suggest modern LED, circadian, and ergonomic alternatives.`
+    systemPrompt: `You are a healthcare lighting, furniture, and laboratory equipment specialist (CIBSE, IES, HTM 08-03, NABH).
+ 
+Analyse ALL filled fields across ALL subsections:
+- Lighting Control & Optimization: lightingControl, lightingControlNotes — is the control strategy appropriate?
+- Lighting Levels: lightingLevelStandard, lightingLevelTreatment, lightingLevelOther — do lux levels match room type and clinical task?
+- Lighting Fitting Type: T5 fluorescent, LED tube, LED strip, compact PL, LED downlight, biophilic/stretch ceiling, ceiling light — flag obsolete fittings
+- Lighting Control Devices: on/off switches, timers, PIR/occupancy sensors, photosensors, LMS — suggest smart alternatives
+- Furniture & Room Fixtures: all yes/no furniture items and furnitureNotes — validate clinical appropriateness
+- Cabinetry & Shelving: all cabinet and shelf items, cabinetryNotes — check for clinical storage standards
+- Fume Cupboards: all fume cupboard types and fumeNotes — validate selection for room type
+ 
+For every obsolete fitting or inadequate spec, state: "In place of [current], consider [modern alternative] — e.g. replace T5 fluorescent with LED panels with tunable white (2700K–6500K) for circadian support and 60% energy saving." Cover all filled fields.`
   },
   {
     id: 5,
     section: "Clinical Functionality & Workflow",
     searchQueries: (data) => [
-      `${data.roomTypology || "hospital room"} clinical workflow best practices zones 2025`,
-      `lean healthcare design workflow optimization clinical spaces latest`
+      `${data.roomTypology || "hospital room"} clinical workflow functional zones patient staff flow lean design 2025`,
+      `medical gas outlets ${data.roomTypology || "hospital room"} HTM 02-01 NABH requirements 2025`
     ],
-    systemPrompt: `You are a clinical workflow and healthcare operations expert. Validate functional zones, patient/staff flow, and workflow design against current evidence-based design principles.`
+    systemPrompt: `You are a clinical workflow expert and medical gas systems specialist (HTM 02-01, NABH, FGI).
+ 
+Analyse ALL filled fields across ALL subsections:
+- Functionality & Workflow: roomFunction, keyActivities, userGroups, operationalScenarios — are they complete and clinically sound?
+- Functional Zones: patientZone, staffZone, equipmentZone, cleanZone, dirtyZone — validate zone separation and infection control logic
+- Circulation: patientFlow, staffFlow, materialFlow — check for cross-contamination risks and lean flow principles
+- Access Control: entryPoints, restrictedZones — validate access control strategy
+- Medical Gas Matrix (medicalGasMatrix): for each gas (vacuum, oxygen, CO₂, N₂O, medAir4, surgAir7, agss, compAir, liqN2, png, lmo, oog) — validate outlet types, quantities, locations, and mounting heights against HTM 02-01 and room type requirements
+ 
+For every gap or outdated configuration, state: "In place of [current approach], consider [modern alternative] — e.g. replace fixed gas pendants with ceiling-mounted medical supply units (Draeger/Ondal) for flexible layout and infection control." Cover all filled fields.`
   },
   {
     id: 6,
     section: "Capacity & Operations",
     searchQueries: (data) => [
-      `${data.roomTypology || "hospital room"} capacity staffing ratio standards 2025`,
-      `healthcare operational hours surge capacity planning best practices`
+      `${data.roomTypology || "hospital room"} patient capacity bed ratio staffing standards NABH 2025`,
+      `healthcare surge capacity throughput operational hours planning best practices 2025`
     ],
-    systemPrompt: `You are a healthcare operations planning expert. Validate capacity, staffing, and operational parameters against current benchmarks and staffing ratio guidelines.`
+    systemPrompt: `You are a healthcare operations and capacity planning expert (NABH, JCI, NHS England benchmarks).
+ 
+Analyse ALL filled fields:
+- patientCapacity: is bed/user count appropriate for room type and area?
+- staffRequirement: validate nurse-to-patient ratio per shift against current standards
+- peakLoad: assess max occupancy planning
+- throughput: patients/day — is it realistic for the room type?
+- averageStayTime: validate against clinical benchmarks
+- surgeCapacity: is expandability logic adequate?
+- operationalHours: 24×7 vs scheduled — appropriate for room criticality?
+ 
+For every field, compare against current Indian and international healthcare benchmarks. State: "In place of [current value/approach], consider [recommended standard] — e.g. for a Critical Care room, nurse-to-patient ratio should be 1:1 or 1:2 per NABH ICU standards, not 1:4." Cover all filled fields.`
   },
   {
     id: 7,
     section: "Adjacency Matrix",
     searchQueries: (data) => [
-      `${data.roomTypology || "hospital room"} adjacency requirements spatial planning hospital design`,
-      `healthcare department adjacency matrix best practices infection control workflow`
+      `${data.roomTypology || "hospital room"} adjacency functional relationships hospital master planning FGI 2025`,
+      `healthcare department adjacency infection control workflow natural light acoustic separation 2025`
     ],
-    systemPrompt: `You are a hospital master planner specializing in departmental adjacency and space relationships. Validate adjacency requirements and suggest optimizations for workflow and infection control.`
+    systemPrompt: `You are a hospital master planner and healthcare architect specializing in spatial relationships (FGI, HTM, HBN, NABH).
+ 
+Analyse ALL filled fields across ALL subsections:
+- Functional Adjacency: primaryFunctionalAdjacency, secondaryFunctionalAdjacency, negativeAdjacency, equipmentSharingAccess
+- Departmental & Site Access: departmentalGrouping, externalAccessSite
+- Environmental Requirements: naturalLightViewRequirement, acousticAdjacencySeparation, visualAdjacencyLineOfSight
+- Infrastructure & Logistics: verticalCoreProximity, materialSupplyRoute
+- Additional Notes: adjacencyOthers
+ 
+For every field, validate the adjacency logic for the room type. Flag any clinically unsafe adjacencies. State: "In place of [current adjacency choice], consider [better relationship] — e.g. for an ICU, direct adjacency to OT via dedicated corridor is preferred over same-floor-only proximity." Cover all filled fields.`
   },
   {
     id: 8,
-    section: "MEP & Engineering Systems",
+    section: "MEP & Engineering Services",
     searchQueries: (data) => [
-      `${data.roomTypology || "hospital room"} HVAC ACH pressure requirements ASHRAE 170 2025`,
-      `hospital medical gas electrical systems latest standards energy efficiency 2025`
+      `${data.roomTypology || "hospital room"} HVAC ACH pressure temperature humidity filtration ASHRAE 170 2025`,
+      `hospital electrical medical gas plumbing standards energy efficiency smart MEP 2025`
     ],
-    systemPrompt: `You are a senior MEP engineer specializing in healthcare facilities (ASHRAE 170, HTM 02-01, NBC India). Validate HVAC, electrical, medical gas, and plumbing specifications. Suggest energy-efficient modern alternatives.`
+    systemPrompt: `You are a senior MEP engineer specializing in healthcare facilities (ASHRAE 170-2021, HTM 02-01, NBC India, NABH, IEC 60601).
+ 
+Analyse ALL filled fields across ALL subsections:
+- HVAC: airChangesACH, pressure, temperature, humidity, filtration, providedFanInRoom, airflowDirection, naturalVentilation, mechanicalVentilation, smokeExtraction, pandemicMode — validate all against ASHRAE 170 and room type
+- Electrical: powerLoad, normalPower, emergencyPower, ups, numberOfSockets, specialOutlets, ssoMatrix (socket outlets by location/source), isolatorMatrix (isolators by location/source/rating)
+- Equipment Related Provision: all 12 yes/no items (dedicatedCircuit, upsBackup, vibrationIsolation, bmsInterface, isolatedGrounding, humidityControl, remoteMonitoring, voltageStabilizer, antiStaticFlooring, fireRatedEnclosure, fireAlarmInterface, gasDetection)
+- Medical Gases: oxygen outlets, medicalAir outlets, vacuum/AGSS outlets, nitrousOxide outlets
+- Plumbing: handWash, wc, shower, plumbingSpecialSystems
+ 
+For every field with a value, validate against current standards and state: "In place of [current spec], consider [modern alternative] — e.g. replace MERV-13 filtration with HEPA H14 terminal filters for a Critical Care room per ASHRAE 170-2021 Table 7.1." Cover all filled fields.`
   },
   {
     id: 9,
     section: "Digital & Smart Systems",
     searchQueries: (data) => [
-      `hospital smart room technology IoT systems ${data.roomTypology || "clinical"} 2025`,
-      `healthcare digital systems HIS EMR RTLS nurse call latest innovations 2025`
+      `hospital smart room IoT digital systems HIS EMR PACS RTLS ${data.roomTypology || "clinical"} 2025`,
+      `healthcare ELV systems nurse call CCTV access control IT accessories latest innovations 2025`
     ],
-    systemPrompt: `You are a healthcare IT and smart building specialist. Validate digital system specifications and suggest the latest smart room technologies, IoT integrations, and digital health innovations.`
+    systemPrompt: `You are a healthcare IT and smart building specialist (HL7, FHIR, HIMSS, ISO 80001).
+ 
+Analyse ALL filled fields across ALL subsections:
+- Core Clinical Systems: hisEmr, pacs, lis, rtls, cctv, iotSensors, aiAnalytics — validate integration completeness and suggest modern platforms
+- ELV Matrix (elvMatrix): all configured ELV systems (data, voice, nurse call, fire alarm, CCTV, access control, AV, IPTV, public address, etc.) — validate quantities per location against room type
+- IT & Digital Accessories (itAccessories): monitorSystem, printer, vitalEquipment, barcodePrinter, laptop, kiosk, multiFunctionPrinter, scanner, highSpeedPrinter, queueManagement, tv, networkSwitch, lanHub — validate selection for room type
+ 
+For every field, compare against 2025 healthcare digital standards and state: "In place of [current system], consider [modern alternative] — e.g. replace standalone PACS with cloud-based VNA (Vendor Neutral Archive) integrated with AI-powered diagnostic tools for faster reads and remote access." Cover all filled fields.`
   },
   {
     id: 10,
     section: "Safety & Infection Control",
     searchQueries: (data) => [
-      `hospital infection control ${data.roomTypology || "clinical room"} latest standards 2025 WHO CDC`,
-      `healthcare safety standards fire life safety infection prevention latest guidelines`
+      `hospital ${data.roomTypology || "clinical room"} infection control isolation pressure HEPA ACH standards WHO CDC NABH 2025`,
+      `healthcare fire safety anti-ligature nurse call electrical safety anti-static flooring standards 2025`
     ],
-    systemPrompt: `You are an infection control and patient safety specialist (WHO, CDC, NABH, JCI). Validate safety and infection control measures and suggest evidence-based improvements aligned with latest guidelines.`
+    systemPrompt: `You are an infection control, patient safety, and fire safety specialist (WHO, CDC, NABH, JCI, BS EN, NBC India).
+ 
+Analyse ALL filled fields across ALL subsections:
+- Core Safety Parameters (coreSafetyMatrix): pressureRegime, isolationLevel, radiationProtect, biohazard
+- Infection Control & Air Quality (infectionControlMatrix): handHygiene, hepa, ach, tempHumidity, uvDisinfect, anteRoom, sharps, bmwWaste, fumigation
+- Plumbing Safety Fixtures (plumbingFixturesMatrix): eyeWash, eShower, combined, kneeFix, footFix, wristBlade, sprayHose, elbowFaucet
+- Fire & Life Safety (fireLifeSafetyMatrix): fireSafety, emergencyPower, sprinkler, smokeDetect, raisedFloor, cleanGas, smokeCompart, fireDoors, evacAids, gasLeak, dampers
+- Electrical & Equipment Safety (electricalSafetyMatrix): antiStatic, emiShield, elecSafeCls
+- Physical Safety & Security (physicalSecurityMatrix): antiLigature, slipResist, nurseCall, panicAlarm, cctv, accessCtrl, seismic, ppeStorage, spillContain
+- Chemical & Hazardous Material Safety (chemHazardMatrix): coshh, cryogenic, cytotoxic
+- Additional Safety Notes: safetyAdditionalNotes
+ 
+For every field, validate against the latest guidelines and state: "In place of [current selection], consider [upgraded option] — e.g. replace Standard Terminal Clean with HPV Decontamination Ready provision for a High infection risk room per WHO IPC guidelines 2024." Cover all filled fields.`
   },
   {
     id: 11,
     section: "Stakeholder Experience",
     searchQueries: (data) => [
-      `patient experience design hospital room ${data.roomTypology || "clinical"} biophilic healing environment 2025`,
-      `healthcare acoustic thermal comfort patient satisfaction design latest research`
+      `patient experience design ${data.roomTypology || "hospital room"} biophilic healing environment lighting acoustic 2025`,
+      `healthcare privacy family interaction smart room infotainment hygiene by design latest 2025`
     ],
-    systemPrompt: `You are a healthcare design researcher specializing in evidence-based design and patient experience (HERD journal, Planetree, Magnet). Validate comfort, privacy, and wellbeing provisions and suggest improvements.`
+    systemPrompt: `You are a healthcare design researcher specializing in evidence-based design and patient experience (HERD Journal, Planetree, Magnet, WELL Building Standard).
+ 
+Analyse ALL filled fields across ALL subsections:
+- Sensory Comfort: lightingQuality, lightingNotes, acousticControl, acousticNotes, thermalOdorControl, thermalOdorNotes — validate comfort standards
+- Patient & Family Experience: privacy, patientComfort, patientComfortNotes, familyInteraction, familyInteractionNotes — validate against current patient-centred care standards
+- Visual & Healing Environment: visualEnvironment, visualEnvironmentNotes, biophiliaHealingEnvironment, biophiliaHealingNotes — validate against HERD evidence and biophilic design research
+- Technology & Hygiene Experience: technologyInfotainment, technologyInfotainmentNotes, infectionControlHygiene, infectionControlHygieneNotes — validate smart room and hygiene-by-design provisions
+ 
+For every field, state: "In place of [current choice], consider [modern approach] — e.g. replace standard curtain screening with full visual + acoustic privacy (STC-50 solid walls + vision panel) for a consultation room to meet patient confidentiality standards." Cover all filled fields.`
   },
   {
     id: 12,
     section: "Fittings, Fixtures & Equipment",
     searchQueries: (data) => [
-      `${data.roomTypology || "hospital room"} medical equipment fittings latest technology 2025`,
-      `hospital room fixtures medical gas outlets nurse call pendant ceiling supply units latest`
+      `${data.roomTypology || "hospital room"} medical gas fittings clinical equipment ceiling supply unit pendant 2025`,
+      `hospital nurse call IT hardware diagnostic equipment furniture latest technology standards 2025`
     ],
-    systemPrompt: `You are a clinical equipment planner and biomedical engineer. Validate fittings, fixtures, and equipment specifications. Suggest modern clinical equipment alternatives and technology upgrades.`
+    systemPrompt: `You are a clinical equipment planner, biomedical engineer, and healthcare facilities specialist (HTM 02-01, IEC 60601, NABH).
+ 
+Analyse ALL filled fields across ALL subsections:
+- Medical Gas & Clinical Fittings: airFlowmeter, oxygenFlowmeter, oxygenFlowmeterLowFlow, suctionAdapterLowFlow, suctionBottle, blenderAirOxygen, ivHook, curtainTrackSystem — validate quantities and types for room type
+- Furniture: trolleyProcedure, stoolAdjustableMobile, patientFurniture, staffVisitorFurniture, storageFurniture — validate clinical ergonomics and quantity
+- Accessories & Dispensers: wallMountedDispensers, wasteBins, additionalFF — validate infection control requirements
+- Clinical Equipment: infusionPumpSyringe, infusionPumpEnteral, infusionPumpSingleChannel, physiologicMonitor, ventilatorNeonatal, infantIncubator, phototherapyLamp, examinationLight, supplyUnitCeiling, medicalEquipments — validate for room type and suggest modern alternatives
+- Diagnostics, IT & Communication: wallMountedDiagnostics, itCommunicationHardware, nurseCallSystems, additionalFE
+ 
+For every item, validate whether the selection is current best-practice and state: "In place of [current equipment], consider [modern alternative] — e.g. replace standalone infusion pumps with networked smart pump systems (Alaris/BD/B.Braun) with dose-error reduction software (DERS) integration." Cover all filled fields.`
   },
   {
     id: 13,
     section: "Waste Management",
     searchQueries: (data) => [
-      `hospital biomedical waste management ${data.roomTypology || "clinical room"} latest rules 2025 India`,
-      `healthcare waste segregation disposal latest technology sustainable practices 2025`
+      `hospital biomedical waste management BMW Rules 2016 amendment ${data.roomTypology || "clinical room"} India 2025`,
+      `healthcare waste segregation colour coding disposal technology sustainable practices 2025`
     ],
-    systemPrompt: `You are a biomedical waste management specialist (BMW Rules 2016, WHO guidelines). Validate waste management provisions and suggest improvements aligned with latest regulations and sustainable practices.`
+    systemPrompt: `You are a biomedical waste management specialist (BMW Rules 2016 & 2019 Amendment, WHO Healthcare Waste Guidelines, CPCB India).
+ 
+Analyse ALL filled fields across ALL subsections:
+- Clinical & Hazardous Waste: wmBiohazard, wmRadioactive, wmFlammableSolvent, wmChemicalWaste, wmHumanAnatomical, wmMicrobiologyWaste, wmWasteSharps, wmCytotoxicDrugs — validate bin type, colour coding, segregation and disposal route
+- General & Solid Waste: wmSoiledWaste, wmSolidWaste, wmLiquidWaste, wmDiscardedContainers, wmUsedOil, wmEwaste, wmConfidentialPaper, wmFoodPantryWaste — validate compliance with BMW Rules
+- Additional Waste Streams: wmOthers1, wmOthers2, wmNotes — check for any non-standard streams
+ 
+For every enabled waste stream, validate the complete management chain (segregation → storage → transport → disposal) and state: "In place of [current approach], consider [modern/compliant alternative] — e.g. replace standard 2-bin system with full 4-bin BMW-compliant station (Yellow/Red/Blue/Black) with foot-operated lids and CPCB-authorised collector tie-up." Cover all enabled waste streams.`
   }
 ];
-
+ 
 // ── Tavily Web Search ─────────────────────────────────────────────────────────
 async function tavilySearch(query) {
   const TAVILY_KEY = process.env.TAVILY_API_KEY;
@@ -1363,7 +1459,7 @@ async function tavilySearch(query) {
     return [];
   }
 }
-
+ 
 // ── Run one section agent ─────────────────────────────────────────────────────
 async function runSectionAgent(agentConfig, sectionData, roomContext, groq) {
   // 1. Web search — run both queries in parallel
@@ -1374,7 +1470,7 @@ async function runSectionAgent(agentConfig, sectionData, roomContext, groq) {
   const searchContext = allResults.length
     ? allResults.map(r => `• ${r.title}: ${r.snippet}`).join("\n")
     : "No web search results available.";
-
+ 
   // 2. Build prompt
   const prompt = `
 ROOM CONTEXT:
@@ -1382,20 +1478,22 @@ ROOM CONTEXT:
 - Room Type: ${roomContext.roomTypology || "Unknown"}
 - Department: ${roomContext.department || "Unknown"}
 - Criticality: ${roomContext.criticalityLevel || "Unknown"}
-
+ 
 SECTION: ${agentConfig.section}
 SECTION DATA (what the user filled):
 ${JSON.stringify(sectionData, null, 2)}
-
+ 
 LATEST INDUSTRY RESEARCH (from web):
 ${searchContext}
-
+ 
 TASK:
-1. Validate each filled field — is it appropriate for this room type?
-2. Identify outdated specs, missing items, or compliance gaps.
-3. Suggest specific modern alternatives with clinical reasoning.
-4. Give an overall confidence/quality score 0-100.
-
+1. Validate EVERY filled field — is it appropriate for this room type, criticality, and infection risk level?
+2. Identify outdated specs, missing items, non-compliant selections, or compliance gaps.
+3. For EVERY issue or improvement opportunity, explicitly suggest a modern replacement in this format:
+   "In place of [current value], consider [modern alternative] — because [clinical/technical reason per current standards]."
+4. Cover ALL fields that have been filled, not just one part of the section.
+5. Give an overall confidence/quality score 0-100 based on completeness and standard compliance.
+ 
 Respond ONLY with this exact JSON (no markdown, no extra text):
 {
   "valid": true or false,
@@ -1411,7 +1509,7 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
     { "title": "<source title>", "url": "<url>" }
   ]
 }`;
-
+ 
   // 3. Call Groq
   const completion = await groq.chat.completions.create({
     model: "llama-3.3-70b-versatile",
@@ -1422,10 +1520,10 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
       { role: "user", content: prompt }
     ]
   });
-
+ 
   const raw = completion.choices[0]?.message?.content || "{}";
   const cleaned = raw.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
-
+ 
   try {
     const result = JSON.parse(cleaned);
     return {
@@ -1449,7 +1547,7 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
     };
   }
 }
-
+ 
 // ── Extract section data from full room data ──────────────────────────────────
 function extractSectionData(fullData, sectionKeys) {
   const result = {};
@@ -1460,30 +1558,30 @@ function extractSectionData(fullData, sectionKeys) {
   });
   return result;
 }
-
+ 
 // ── POST /validate-rds ────────────────────────────────────────────────────────
 app.post("/validate-rds", async (req, res) => {
   try {
     const { roomId } = req.body;
     if (!roomId) return res.status(400).json({ error: "roomId is required" });
-
+ 
     const GROQ_KEY = process.env.GROQ_API_KEY;
     if (!GROQ_KEY) return res.status(500).json({ error: "GROQ_API_KEY not set" });
-
+ 
     // Fetch room from Supabase
     const { data: room, error: fetchError } = await supabase
       .from("rds_rooms")
       .select("*")
       .eq("id", String(roomId))
       .single();
-
+ 
     if (fetchError || !room) {
       return res.status(404).json({ error: "Room not found" });
     }
-
+ 
     const fullData = typeof room.data === "string" ? safeJson(room.data) : (room.data || {});
     const groq = new Groq({ apiKey: GROQ_KEY });
-
+ 
     const roomContext = {
       roomName:        fullData.roomName        || room.roomname     || "",
       roomTypology:    fullData.roomTypology     || "",
@@ -1491,9 +1589,9 @@ app.post("/validate-rds", async (req, res) => {
       criticalityLevel: fullData.criticalityLevel || "",
       roomCode:        fullData.roomCode         || room.roomcode     || ""
     };
-
+ 
     console.log(`[Validation] Starting 13-agent validation for room ${roomContext.roomCode}...`);
-
+ 
     // Run all 13 agents in parallel
     const agentPromises = AGENT_CONFIGS.map((agentConfig, idx) => {
       const sectionDef  = SECTIONS[idx];
@@ -1512,16 +1610,16 @@ app.post("/validate-rds", async (req, res) => {
           sources:   []
         }));
     });
-
+ 
     const sectionResults = await Promise.all(agentPromises);
     console.log(`[Validation] All 13 agents completed for ${roomContext.roomCode}`);
-
+ 
     // Consolidate report
     const totalConfidence   = Math.round(sectionResults.reduce((s, r) => s + (r.confidence || 0), 0) / 13);
     const totalIssues       = sectionResults.reduce((s, r) => s + (r.issues?.length || 0), 0);
     const totalSuggestions  = sectionResults.reduce((s, r) => s + (r.suggestions?.length || 0), 0);
     const highPriority      = sectionResults.flatMap(r => r.suggestions || []).filter(s => s.priority === "High").length;
-
+ 
     const report = {
       roomId:       String(roomId),
       roomCode:     roomContext.roomCode,
@@ -1539,7 +1637,7 @@ app.post("/validate-rds", async (req, res) => {
       },
       sections: sectionResults
     };
-
+ 
     // Save to Supabase rds_validations — upsert so re-runs overwrite old report
     const { error: saveErr } = await supabase
       .from("rds_validations")
@@ -1552,23 +1650,23 @@ app.post("/validate-rds", async (req, res) => {
         },
         { onConflict: "room_id" }   // update existing row if room_id already exists
       );
-
+ 
     if (saveErr) {
       // Log the full error so you can see it in Render logs
       console.error("[Validation] Supabase save FAILED:", JSON.stringify(saveErr));
     } else {
       console.log("[Validation] ✓ Report saved to rds_validations for room_id:", String(roomId));
     }
-
+ 
     console.log(`[Validation] ✓ Score=${totalConfidence} Issues=${totalIssues} Suggestions=${totalSuggestions}`);
     res.json(report);
-
+ 
   } catch (e) {
     console.error("Validation error:", e);
     res.status(500).json({ error: "Validation failed: " + e.message });
   }
 });
-
+ 
 // GET /validate-rds/:roomId — fetch saved validation report
 app.get("/validate-rds/:roomId", async (req, res) => {
   try {
@@ -1578,7 +1676,7 @@ app.get("/validate-rds/:roomId", async (req, res) => {
       .eq("room_id", req.params.roomId)
       .order("created_at", { ascending: false })
       .limit(1);          // NO .single() — avoids throwing when empty
-
+ 
     if (error) {
       console.error("[Validation] GET error:", JSON.stringify(error));
       return res.status(500).json({ error: "Database error: " + error.message });
