@@ -280,6 +280,156 @@ function readUsers() {
   ];
 }
 
+// ─── STRUCTURED FIELD PARSERS ────────────────────────────
+/**
+ * Attempt to parse a field value as JSON.
+ * Returns the parsed object/array, or null if not parseable.
+ */
+function tryParseJson(val) {
+  if (typeof val !== "string") return null;
+  const trimmed = val.trim();
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return null;
+  try { return JSON.parse(trimmed); } catch { return null; }
+}
+
+/**
+ * Keys that contain structured JSON data and should be rendered as sub-tables.
+ * Maps field key → renderer type.
+ */
+const STRUCTURED_KEYS = new Set([
+  "constructionMatrix","medicalGasMatrix","elvMatrix","doorConfig","windowConfig",
+  "sanitaryFittings","itAccessories","coreSafetyMatrix","infectionControlMatrix",
+  "plumbingFixturesMatrix","fireLifeSafetyMatrix","electricalSafetyMatrix",
+  "physicalSecurityMatrix","chemHazardMatrix","ssoMatrix","isolatorMatrix",
+  "userGroups","medicalEquipments","wallMountedDiagnostics","itCommunicationHardware",
+  "nurseCallSystems","patientFurniture","staffVisitorFurniture","storageFurniture",
+  "wallMountedDispensers","wasteBins","additionalFF","additionalFE"
+]);
+
+/**
+ * Convert a camelCase or snake_case key to a human-readable label.
+ */
+function keyToLabel(k) {
+  return k
+    .replace(/([A-Z])/g, " $1")
+    .replace(/[_-]/g, " ")
+    .replace(/^./, s => s.toUpperCase())
+    .trim();
+}
+
+/**
+ * Flatten a nested object into rows: [{label, value}]
+ * Handles: Medical Gas Matrix, Construction Matrix, ELV Matrix, Safety matrices, etc.
+ */
+function flattenStructured(parsed, fieldKey) {
+  const rows = [];
+
+  // ── Medical Gas Matrix ───────────────────────────────────
+  // { vacuum: { wall:1, pendant:0 }, oxygen: { pendant:1 } ... }
+  if (fieldKey === "medicalGasMatrix" && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const gases = Object.keys(parsed);
+    if (gases.length > 0) {
+      // Collect all location keys across all gases
+      const locationKeys = new Set();
+      gases.forEach(g => {
+        if (typeof parsed[g] === "object") Object.keys(parsed[g]).forEach(k => locationKeys.add(k));
+      });
+      return { type: "medGasTable", gases, locationKeys: [...locationKeys], data: parsed };
+    }
+  }
+
+  // ── ELV Matrix ───────────────────────────────────────────
+  // { selectedSystems: [...], quantities: { "LAN": { "WALL (W)": 0, ... } } }
+  if (fieldKey === "elvMatrix" && typeof parsed === "object") {
+    const systems = parsed.selectedSystems || [];
+    const quantities = parsed.quantities || {};
+    if (systems.length > 0) {
+      return { type: "elvTable", systems, quantities };
+    }
+  }
+
+  // ── Construction Matrix ──────────────────────────────────
+  // { acoustics: {type,size,acoustic,thermal,protection,finish,notes}, wall1: {...}, floor: {...} }
+  if (fieldKey === "constructionMatrix" && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const elements = Object.keys(parsed);
+    const cols = ["type","size","acoustic","thermal","protection","finish","notes"];
+    return { type: "constructionTable", elements, cols, data: parsed };
+  }
+
+  // ── Door Config ──────────────────────────────────────────
+  if (fieldKey === "doorConfig" && typeof parsed === "object" && !Array.isArray(parsed)) {
+    Object.entries(parsed).forEach(([k, v]) => {
+      const val = Array.isArray(v) ? v.join(", ") : String(v);
+      rows.push({ label: keyToLabel(k), value: val });
+    });
+    return { type: "keyValue", rows };
+  }
+
+  // ── Window Config ────────────────────────────────────────
+  if (fieldKey === "windowConfig" && typeof parsed === "object" && !Array.isArray(parsed)) {
+    Object.entries(parsed).forEach(([winKey, winVal]) => {
+      if (typeof winVal === "object" && winVal !== null) {
+        const parts = Object.entries(winVal).map(([k, v]) => `${keyToLabel(k)}: ${Array.isArray(v) ? v.join(", ") : v}`).join(" | ");
+        rows.push({ label: keyToLabel(winKey), value: parts });
+      } else {
+        rows.push({ label: keyToLabel(winKey), value: String(winVal) });
+      }
+    });
+    return { type: "keyValue", rows };
+  }
+
+  // ── Sanitary Fittings ────────────────────────────────────
+  if (fieldKey === "sanitaryFittings" && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const enabled = Object.entries(parsed)
+      .filter(([, v]) => v === true || v === "true")
+      .map(([k]) => keyToLabel(k));
+    if (enabled.length > 0) {
+      return { type: "tagList", items: enabled };
+    }
+    Object.entries(parsed).forEach(([k, v]) => rows.push({ label: keyToLabel(k), value: String(v) }));
+    return { type: "keyValue", rows };
+  }
+
+  // ── IT Accessories ───────────────────────────────────────
+  if (fieldKey === "itAccessories" && typeof parsed === "object" && !Array.isArray(parsed)) {
+    Object.entries(parsed).forEach(([k, v]) => {
+      if (typeof v === "object" && v !== null) {
+        const parts = Object.entries(v).map(([ik, iv]) => `${keyToLabel(ik)}: ${iv}`).join(", ");
+        rows.push({ label: keyToLabel(k), value: parts });
+      } else {
+        rows.push({ label: keyToLabel(k), value: String(v) });
+      }
+    });
+    return { type: "keyValue", rows };
+  }
+
+  // ── Safety / Infection Control matrices ─────────────────
+  // { pressureRegime: "Positive", biohazard: "BSL-4" }
+  if (typeof parsed === "object" && !Array.isArray(parsed)) {
+    Object.entries(parsed).forEach(([k, v]) => {
+      const val = Array.isArray(v) ? v.join(", ") : String(v);
+      rows.push({ label: keyToLabel(k), value: val });
+    });
+    return { type: "keyValue", rows };
+  }
+
+  // ── Arrays ───────────────────────────────────────────────
+  if (Array.isArray(parsed)) {
+    if (parsed.every(i => typeof i === "object" && i !== null)) {
+      // Array of objects → key-value rows for each
+      parsed.forEach((item, idx) => {
+        const parts = Object.entries(item).map(([k, v]) => `${keyToLabel(k)}: ${v}`).join(" | ");
+        rows.push({ label: `Item ${idx + 1}`, value: parts });
+      });
+    } else {
+      rows.push({ label: "Values", value: parsed.join(", ") });
+    }
+    return { type: "keyValue", rows };
+  }
+
+  return null; // fall through to plain text
+}
+
 // ─── PDF BUILDER ─────────────────────────────────────────
 function buildPDF(rows) {
   return new Promise((resolve, reject) => {
@@ -337,6 +487,332 @@ function buildPDF(rows) {
          .text("Medical College — Facility Planning", MARGIN + CONTENT / 2, 14,
                { width: CONTENT / 2, align: "right" });
       doc.y = 50;
+    }
+
+    // ── drawStructuredField: renders a field label + sub-table ──────────────
+    function drawStructuredField(label, structured, rowIdx) {
+      const INNER_MARGIN = MARGIN + COL1;
+      const INNER_W = COL2;
+      const CELL_PAD = 5;
+      const HDR_H = 16;
+      const DATA_ROW_H = 14;
+      const HEADER_BG = "#1e3a8a";
+      const ALT_ROW = "#f0f4ff";
+
+      // ── Key-Value sub-table ──────────────────────────────────────────────
+      if (structured.type === "keyValue" && structured.rows.length > 0) {
+        const subRows = structured.rows;
+        const totalH = HDR_H + subRows.length * DATA_ROW_H + CELL_PAD * 2;
+        const LABEL_ROW_H = Math.max(20 + PAD * 2, 28);
+
+        ensureSpace(LABEL_ROW_H + totalH + 4);
+        y = doc.y;
+
+        // Left label cell
+        const bgLabel = rowIdx % 2 === 0 ? LGRAY : "#fafbfc";
+        fillRect(MARGIN, y, COL1, LABEL_ROW_H + totalH, bgLabel);
+        doc.save().strokeColor(BORDER).lineWidth(0.3)
+           .rect(MARGIN, y, COL1, LABEL_ROW_H + totalH).stroke().restore();
+        const lh = doc.font("Helvetica-Bold").fontSize(8.5).heightOfString(label, { width: COL1 - 14 });
+        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
+           .text(label, MARGIN + 7, y + (LABEL_ROW_H + totalH - lh) / 2,
+                 { width: COL1 - 14, lineBreak: false, ellipsis: true });
+
+        // Right value cell background
+        fillRect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H + totalH, rowIdx % 2 === 0 ? WHITE : "#fdfdfd");
+        doc.save().strokeColor(BORDER).lineWidth(0.3)
+           .rect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H + totalH).stroke().restore();
+        doc.save().strokeColor(BORDER).lineWidth(0.3)
+           .moveTo(MARGIN + COL1, y).lineTo(MARGIN + COL1, y + LABEL_ROW_H + totalH).stroke().restore();
+
+        // Sub-table inside right cell
+        const TX = INNER_MARGIN + CELL_PAD;
+        const TW = INNER_W - CELL_PAD * 2;
+        const COL_L = TW * 0.42;
+        const COL_V = TW * 0.58;
+        let ty = y + CELL_PAD;
+
+        // Sub-header
+        fillRect(TX, ty, TW, HDR_H, HEADER_BG);
+        doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(TX, ty, TW, HDR_H).stroke().restore();
+        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
+           .text("PROPERTY", TX + 4, ty + 4, { width: COL_L - 4, lineBreak: false });
+        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
+           .text("VALUE", TX + COL_L + 4, ty + 4, { width: COL_V - 4, lineBreak: false });
+        ty += HDR_H;
+
+        subRows.forEach((row, si) => {
+          const bg = si % 2 === 0 ? WHITE : ALT_ROW;
+          fillRect(TX, ty, COL_L, DATA_ROW_H, bg);
+          fillRect(TX + COL_L, ty, COL_V, DATA_ROW_H, bg);
+          doc.save().strokeColor(BORDER).lineWidth(0.2).rect(TX, ty, TW, DATA_ROW_H).stroke().restore();
+          doc.save().strokeColor(BORDER).lineWidth(0.2)
+             .moveTo(TX + COL_L, ty).lineTo(TX + COL_L, ty + DATA_ROW_H).stroke().restore();
+          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(MUTED)
+             .text(row.label, TX + 3, ty + 3, { width: COL_L - 6, lineBreak: false, ellipsis: true });
+          doc.font("Helvetica").fontSize(7.5).fillColor(TEXT)
+             .text(row.value, TX + COL_L + 3, ty + 3, { width: COL_V - 6, lineBreak: false, ellipsis: true });
+          ty += DATA_ROW_H;
+        });
+
+        y = y + LABEL_ROW_H + totalH;
+        doc.y = y;
+        return;
+      }
+
+      // ── Tag/chip list (e.g. Sanitary Fittings) ─────────────────────────
+      if (structured.type === "tagList" && structured.items.length > 0) {
+        const CHIP_H = 14, CHIP_GAP = 4, CHIP_PAD_X = 6;
+        const availW = INNER_W - CELL_PAD * 2;
+        // Measure chips and wrap into lines
+        const lines = [];
+        let currentLine = [], currentW = 0;
+        structured.items.forEach(item => {
+          const cw = doc.font("Helvetica").fontSize(7.5).widthOfString(item) + CHIP_PAD_X * 2 + CHIP_GAP;
+          if (currentW + cw > availW && currentLine.length > 0) {
+            lines.push(currentLine);
+            currentLine = [item];
+            currentW = cw;
+          } else {
+            currentLine.push(item);
+            currentW += cw;
+          }
+        });
+        if (currentLine.length > 0) lines.push(currentLine);
+
+        const totalH = lines.length * (CHIP_H + CHIP_GAP) + CELL_PAD * 2;
+        const LABEL_ROW_H = Math.max(totalH, 28);
+
+        ensureSpace(LABEL_ROW_H + 4);
+        y = doc.y;
+
+        // Left label
+        const bgLabel = rowIdx % 2 === 0 ? LGRAY : "#fafbfc";
+        fillRect(MARGIN, y, COL1, LABEL_ROW_H, bgLabel);
+        doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, COL1, LABEL_ROW_H).stroke().restore();
+        const lh = doc.font("Helvetica-Bold").fontSize(8.5).heightOfString(label, { width: COL1 - 14 });
+        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
+           .text(label, MARGIN + 7, y + (LABEL_ROW_H - lh) / 2, { width: COL1 - 14, lineBreak: false, ellipsis: true });
+
+        // Right value cell
+        fillRect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H, rowIdx % 2 === 0 ? WHITE : "#fdfdfd");
+        doc.save().strokeColor(BORDER).lineWidth(0.3).rect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H).stroke().restore();
+        doc.save().strokeColor(BORDER).lineWidth(0.3)
+           .moveTo(MARGIN + COL1, y).lineTo(MARGIN + COL1, y + LABEL_ROW_H).stroke().restore();
+
+        let cy = y + CELL_PAD;
+        lines.forEach(line => {
+          let cx = INNER_MARGIN + CELL_PAD;
+          line.forEach(item => {
+            const cw = doc.font("Helvetica").fontSize(7.5).widthOfString(item) + CHIP_PAD_X * 2;
+            fillRect(cx, cy, cw, CHIP_H, "#dbeafe");
+            doc.save().strokeColor("#93c5fd").lineWidth(0.3).rect(cx, cy, cw, CHIP_H).stroke().restore();
+            doc.font("Helvetica").fontSize(7.5).fillColor(NAVY)
+               .text(item, cx + CHIP_PAD_X, cy + 3, { width: cw - CHIP_PAD_X * 2, lineBreak: false });
+            cx += cw + CHIP_GAP;
+          });
+          cy += CHIP_H + CHIP_GAP;
+        });
+
+        y = y + LABEL_ROW_H;
+        doc.y = y;
+        return;
+      }
+
+      // ── Medical Gas Point Schedule table ────────────────────────────────
+      if (structured.type === "medGasTable") {
+        const { gases, locationKeys, data: gasData } = structured;
+        const COL_GAS = 110;
+        const locCols = locationKeys.length;
+        const COL_LOC = (CONTENT - COL_GAS) / locCols;
+        const HDR_R_H = 18;
+        const GAS_ROW_H = 14;
+        const totalH = HDR_R_H * 2 + gases.length * GAS_ROW_H + 2;
+
+        // Label row spanning full width
+        ensureSpace(20 + totalH + 8);
+        y = doc.y;
+
+        // Field label bar (full width)
+        fillRect(MARGIN, y, CONTENT, 20, "#e0e7ff");
+        doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, 20).stroke().restore();
+        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY)
+           .text(label, MARGIN + 7, y + 6, { width: CONTENT - 14, lineBreak: false });
+        y += 20;
+
+        // Table header row 1: GAS/SERVICE + location group headers
+        fillRect(MARGIN, y, COL_GAS, HDR_R_H, HEADER_BG);
+        doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(MARGIN, y, COL_GAS, HDR_R_H).stroke().restore();
+        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
+           .text("GAS / SERVICE", MARGIN + 4, y + 5, { width: COL_GAS - 8, lineBreak: false });
+
+        locationKeys.forEach((loc, li) => {
+          const lx = MARGIN + COL_GAS + li * COL_LOC;
+          fillRect(lx, y, COL_LOC, HDR_R_H, HEADER_BG);
+          doc.save().strokeColor("#ffffff").lineWidth(0.2).rect(lx, y, COL_LOC, HDR_R_H).stroke().restore();
+          doc.font("Helvetica-Bold").fontSize(6.5).fillColor(WHITE)
+             .text(loc.toUpperCase(), lx + 2, y + 5, { width: COL_LOC - 4, align: "center", lineBreak: false });
+        });
+        y += HDR_R_H;
+
+        // Gas rows
+        gases.forEach((gas, gi) => {
+          const bg = gi % 2 === 0 ? WHITE : ALT_ROW;
+          fillRect(MARGIN, y, COL_GAS, GAS_ROW_H, bg);
+          doc.save().strokeColor(BORDER).lineWidth(0.2).rect(MARGIN, y, COL_GAS, GAS_ROW_H).stroke().restore();
+          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(TEXT)
+             .text(gas.toUpperCase(), MARGIN + 4, y + 3, { width: COL_GAS - 8, lineBreak: false, ellipsis: true });
+
+          const gasData2 = typeof gasData[gas] === "object" ? gasData[gas] : {};
+          locationKeys.forEach((loc, li) => {
+            const lx = MARGIN + COL_GAS + li * COL_LOC;
+            fillRect(lx, y, COL_LOC, GAS_ROW_H, bg);
+            doc.save().strokeColor(BORDER).lineWidth(0.2).rect(lx, y, COL_LOC, GAS_ROW_H).stroke().restore();
+            const qty = gasData2[loc] !== undefined ? String(gasData2[loc]) : "—";
+            doc.font("Helvetica").fontSize(7.5).fillColor(qty === "0" || qty === "—" ? MUTED : TEXT)
+               .text(qty, lx + 2, y + 3, { width: COL_LOC - 4, align: "center", lineBreak: false });
+          });
+          y += GAS_ROW_H;
+        });
+
+        doc.y = y + 4;
+        y = doc.y;
+        return;
+      }
+
+      // ── Construction Element Schedule table ──────────────────────────────
+      if (structured.type === "constructionTable") {
+        const { elements, cols, data: conData } = structured;
+        const COL_ELEM = 90;
+        const COL_C = (CONTENT - COL_ELEM) / cols.length;
+        const HDR_R_H = 18;
+        const EL_ROW_H = 14;
+        const totalH = HDR_R_H + elements.length * EL_ROW_H + 2;
+
+        ensureSpace(20 + totalH + 8);
+        y = doc.y;
+
+        // Field label bar
+        fillRect(MARGIN, y, CONTENT, 20, "#e0e7ff");
+        doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, 20).stroke().restore();
+        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY)
+           .text(label, MARGIN + 7, y + 6, { width: CONTENT - 14, lineBreak: false });
+        y += 20;
+
+        // Header
+        fillRect(MARGIN, y, COL_ELEM, HDR_R_H, HEADER_BG);
+        doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(MARGIN, y, COL_ELEM, HDR_R_H).stroke().restore();
+        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
+           .text("ELEMENT", MARGIN + 4, y + 5, { width: COL_ELEM - 8, lineBreak: false });
+        cols.forEach((col, ci) => {
+          const cx = MARGIN + COL_ELEM + ci * COL_C;
+          fillRect(cx, y, COL_C, HDR_R_H, HEADER_BG);
+          doc.save().strokeColor("#ffffff").lineWidth(0.2).rect(cx, y, COL_C, HDR_R_H).stroke().restore();
+          doc.font("Helvetica-Bold").fontSize(6).fillColor(WHITE)
+             .text(col.toUpperCase(), cx + 2, y + 5, { width: COL_C - 4, align: "center", lineBreak: false });
+        });
+        y += HDR_R_H;
+
+        elements.forEach((elem, ei) => {
+          const bg = ei % 2 === 0 ? WHITE : ALT_ROW;
+          fillRect(MARGIN, y, COL_ELEM, EL_ROW_H, bg);
+          doc.save().strokeColor(BORDER).lineWidth(0.2).rect(MARGIN, y, COL_ELEM, EL_ROW_H).stroke().restore();
+          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(TEXT)
+             .text(keyToLabel(elem), MARGIN + 4, y + 3, { width: COL_ELEM - 8, lineBreak: false, ellipsis: true });
+
+          const elemData = typeof conData[elem] === "object" ? conData[elem] : {};
+          cols.forEach((col, ci) => {
+            const cx = MARGIN + COL_ELEM + ci * COL_C;
+            fillRect(cx, y, COL_C, EL_ROW_H, bg);
+            doc.save().strokeColor(BORDER).lineWidth(0.2).rect(cx, y, COL_C, EL_ROW_H).stroke().restore();
+            const val = elemData[col] || "—";
+            doc.font("Helvetica").fontSize(7).fillColor(val === "—" ? MUTED : TEXT)
+               .text(String(val), cx + 2, y + 3, { width: COL_C - 4, align: "center", lineBreak: false, ellipsis: true });
+          });
+          y += EL_ROW_H;
+        });
+
+        doc.y = y + 4;
+        y = doc.y;
+        return;
+      }
+
+      // ── ELV Matrix table ────────────────────────────────────────────────
+      if (structured.type === "elvTable") {
+        const { systems, quantities } = structured;
+        // Location types
+        const locKeys = ["WALL (W)", "BEDHEAD PANEL (BHP)", "MEDICAL PENDANT (MP)", "CEILING (C)"];
+        const LOC_LABELS = ["WALL", "BHP", "MP", "CEIL"];
+        const COL_SYS = 130;
+        const COL_LC = (CONTENT - COL_SYS) / locKeys.length;
+        const HDR_R_H = 18;
+        const SYS_ROW_H = 14;
+        const totalH = HDR_R_H + systems.length * SYS_ROW_H + 2;
+
+        ensureSpace(20 + totalH + 8);
+        y = doc.y;
+
+        // Field label bar
+        fillRect(MARGIN, y, CONTENT, 20, "#e0e7ff");
+        doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, 20).stroke().restore();
+        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY)
+           .text(label, MARGIN + 7, y + 6, { width: CONTENT - 14, lineBreak: false });
+        y += 20;
+
+        // Header
+        fillRect(MARGIN, y, COL_SYS, HDR_R_H, HEADER_BG);
+        doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(MARGIN, y, COL_SYS, HDR_R_H).stroke().restore();
+        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
+           .text("SYSTEM", MARGIN + 4, y + 5, { width: COL_SYS - 8, lineBreak: false });
+        LOC_LABELS.forEach((loc, li) => {
+          const lx = MARGIN + COL_SYS + li * COL_LC;
+          fillRect(lx, y, COL_LC, HDR_R_H, HEADER_BG);
+          doc.save().strokeColor("#ffffff").lineWidth(0.2).rect(lx, y, COL_LC, HDR_R_H).stroke().restore();
+          doc.font("Helvetica-Bold").fontSize(6.5).fillColor(WHITE)
+             .text(loc, lx + 2, y + 5, { width: COL_LC - 4, align: "center", lineBreak: false });
+        });
+        y += HDR_R_H;
+
+        systems.forEach((sys, si) => {
+          const bg = si % 2 === 0 ? WHITE : ALT_ROW;
+          fillRect(MARGIN, y, COL_SYS, SYS_ROW_H, bg);
+          doc.save().strokeColor(BORDER).lineWidth(0.2).rect(MARGIN, y, COL_SYS, SYS_ROW_H).stroke().restore();
+          doc.font("Helvetica").fontSize(7.5).fillColor(TEXT)
+             .text(sys, MARGIN + 4, y + 3, { width: COL_SYS - 8, lineBreak: false, ellipsis: true });
+
+          const sysQtys = quantities[sys] || {};
+          locKeys.forEach((lk, li) => {
+            const lx = MARGIN + COL_SYS + li * COL_LC;
+            fillRect(lx, y, COL_LC, SYS_ROW_H, bg);
+            doc.save().strokeColor(BORDER).lineWidth(0.2).rect(lx, y, COL_LC, SYS_ROW_H).stroke().restore();
+            const qty = sysQtys[lk] !== undefined ? String(sysQtys[lk]) : "—";
+            doc.font("Helvetica").fontSize(7.5).fillColor(qty === "0" || qty === "—" ? MUTED : TEXT)
+               .text(qty, lx + 2, y + 3, { width: COL_LC - 4, align: "center", lineBreak: false });
+          });
+          y += SYS_ROW_H;
+        });
+
+        doc.y = y + 4;
+        y = doc.y;
+        return;
+      }
+
+      // ── Fallback: render as plain text row ───────────────────────────────
+      const ROW_H = rowHeights[pairs.findIndex(([l]) => l === label)] || 24;
+      ensureSpace(ROW_H + 2);
+      y = doc.y;
+      const bgLabel = rowIdx % 2 === 0 ? LGRAY : "#fafbfc";
+      fillRect(MARGIN, y, COL1, ROW_H, bgLabel);
+      fillRect(MARGIN + COL1, y, COL2, ROW_H, rowIdx % 2 === 0 ? WHITE : "#fdfdfd");
+      doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, ROW_H).stroke().restore();
+      doc.save().strokeColor(BORDER).lineWidth(0.3)
+         .moveTo(MARGIN + COL1, y).lineTo(MARGIN + COL1, y + ROW_H).stroke().restore();
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
+         .text(label, MARGIN + 7, y + PAD, { width: COL1 - 14, lineBreak: false, ellipsis: true });
+      doc.font("Helvetica").fontSize(9).fillColor(TEXT)
+         .text(String(structured || ""), MARGIN + COL1 + 7, y + PAD, { width: COL2 - 14, lineBreak: true });
+      y = y + ROW_H;
+      doc.y = y;
     }
 
     rows.forEach((r, rIdx) => {
@@ -456,47 +932,43 @@ function buildPDF(rows) {
         doc.y = y;
 
         pairs.forEach(([label, value], i) => {
-          const ROW_H = rowHeights[i];
+          const rawKey = sec.keys.find(k => toLabel(k) === label) || "";
+          const isStructured = STRUCTURED_KEYS.has(rawKey);
+          const parsed = isStructured ? tryParseJson(value) : null;
+          const structured = parsed ? flattenStructured(parsed, rawKey) : null;
 
-          // If this row won't fit on the current page, add a new page.
-          // After the page break we must re-draw nothing (no orphan header);
-          // the section already has its header above — that's acceptable.
-          ensureSpace(ROW_H + 2);
-          y = doc.y;
+          if (structured) {
+            // ── Structured field: render label bar + sub-table ─────────
+            drawStructuredField(label, structured, i);
+          } else {
+            const ROW_H = rowHeights[i];
+            ensureSpace(ROW_H + 2);
+            y = doc.y;
 
-          // ── Background fills ──────────────────────────────────────────
-          const bgLabel = i % 2 === 0 ? LGRAY    : "#fafbfc";
-          const bgValue = i % 2 === 0 ? WHITE    : "#fdfdfd";
-          fillRect(MARGIN,        y, COL1, ROW_H, bgLabel);
-          fillRect(MARGIN + COL1, y, COL2, ROW_H, bgValue);
+            const bgLabel = i % 2 === 0 ? LGRAY    : "#fafbfc";
+            const bgValue = i % 2 === 0 ? WHITE    : "#fdfdfd";
+            fillRect(MARGIN,        y, COL1, ROW_H, bgLabel);
+            fillRect(MARGIN + COL1, y, COL2, ROW_H, bgValue);
 
-          // ── Outer border + bottom separator ──────────────────────────
-          doc.save().strokeColor(BORDER).lineWidth(0.3)
-             .rect(MARGIN, y, CONTENT, ROW_H).stroke().restore();
+            doc.save().strokeColor(BORDER).lineWidth(0.3)
+               .rect(MARGIN, y, CONTENT, ROW_H).stroke().restore();
+            doc.save().strokeColor(BORDER).lineWidth(0.3)
+               .moveTo(MARGIN + COL1, y).lineTo(MARGIN + COL1, y + ROW_H).stroke().restore();
 
-          // ── Vertical divider between label and value columns ──────────
-          doc.save().strokeColor(BORDER).lineWidth(0.3)
-             .moveTo(MARGIN + COL1, y)
-             .lineTo(MARGIN + COL1, y + ROW_H)
-             .stroke().restore();
+            const labelTextH = doc.font("Helvetica-Bold").fontSize(8.5)
+              .heightOfString(label, { width: COL1 - 14 });
+            const labelY = y + (ROW_H - labelTextH) / 2;
+            doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
+               .text(label, MARGIN + 7, labelY,
+                     { width: COL1 - 14, lineBreak: false, ellipsis: true });
 
-          // ── Label (vertically centred, single line with ellipsis) ─────
-          const labelTextH = doc.font("Helvetica-Bold").fontSize(8.5)
-            .heightOfString(label, { width: COL1 - 14 });
-          const labelY = y + (ROW_H - labelTextH) / 2;
-          doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
-             .text(label, MARGIN + 7, labelY,
-                   { width: COL1 - 14, lineBreak: false, ellipsis: true });
+            doc.font("Helvetica").fontSize(9).fillColor(TEXT)
+               .text(value, MARGIN + COL1 + 7, y + PAD,
+                     { width: COL2 - 14, lineBreak: true });
 
-          // ── Value (top-aligned, wrapping) ─────────────────────────────
-          doc.font("Helvetica").fontSize(9).fillColor(TEXT)
-             .text(value, MARGIN + COL1 + 7, y + PAD,
-                   { width: COL2 - 14, lineBreak: true });
-
-          // Advance cursor to the bottom of the drawn row — never trust
-          // doc.y here because the value text may have moved it further.
-          y = y + ROW_H;
-          doc.y = y;
+            y = y + ROW_H;
+            doc.y = y;
+          }
         });
 
         doc.y += 8; // breathing room after each section
