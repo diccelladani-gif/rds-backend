@@ -24,13 +24,13 @@ async function logAudit({ roomId, roomCode, action, performedBy, details = {} })
     await supabase.from("rds_audit_log").insert({
       room_id:      String(roomId),
       room_code:    roomCode,
-      action,                          // "created" | "updated" | "deleted" | "exported"
+      action,
       performed_by: performedBy || "system",
       details:      JSON.stringify(details),
       created_at:   new Date().toISOString()
     });
   } catch (e) {
-    console.warn("Audit log failed:", e.message); // non-blocking
+    console.warn("Audit log failed:", e.message);
   }
 }
 
@@ -47,16 +47,14 @@ async function extractPdfText(base64) {
     const vp      = page.getViewport({ scale: 1 });
     const pageH   = vp.height;
 
-    // Collect items with normalized Y (top-down) and X positions
     const items = content.items
       .filter(item => item.str && item.str.trim())
       .map(item => ({
         str: item.str.trim(),
         x:   Math.round(item.transform[4]),
-        y:   Math.round(pageH - item.transform[5]), // flip Y to top-down
+        y:   Math.round(pageH - item.transform[5]),
       }));
 
-    // Group items into lines by Y proximity (within 6px = same line)
     const lineMap = new Map();
     items.forEach(item => {
       const lineY = [...lineMap.keys()].find(k => Math.abs(k - item.y) <= 6);
@@ -67,23 +65,16 @@ async function extractPdfText(base64) {
       }
     });
 
-    // Sort lines top-to-bottom, items left-to-right within line
     const sortedLines = [...lineMap.entries()]
       .sort(([ya], [yb]) => ya - yb)
       .map(([, lineItems]) =>
         lineItems.sort((a, b) => a.x - b.x).map(i => i.str)
       );
 
-    // Reconstruct structured text:
-    // If line has 2+ items with x-gap > 80px → treat as label:value pair
-    // Otherwise join as single line
     for (const lineItems of sortedLines) {
       if (lineItems.length === 0) continue;
-
       if (lineItems.length >= 2) {
-        // Detect label:value structure
         const joined = lineItems.join("  |  ");
-        // Also emit as "Label: Value" for better AI parsing
         const labelVal = lineItems[0] + ": " + lineItems.slice(1).join(" ");
         allLines.push(labelVal);
         allLines.push(joined);
@@ -94,11 +85,9 @@ async function extractPdfText(base64) {
     allLines.push("--- Page Break ---");
   }
 
-  // Post-process: merge continuation lines (items that are values continuing on next line)
   const merged = [];
   for (let i = 0; i < allLines.length; i++) {
     const line = allLines[i];
-    // If line looks like a heading/section, add separator
     if (/^\d+\.\s+[A-Z]/.test(line)) {
       merged.push("\n" + line);
     } else {
@@ -135,7 +124,7 @@ app.use((req, _res, next) => {
 const DATA_DIR   = path.join(__dirname, "data");
 const FILE_PATH  = path.join(DATA_DIR, "rds-data.xlsx");
 const IMAGE_DIR  = path.join(DATA_DIR, "images");
-const USERS_FILE = path.join(DATA_DIR, "users.xlsx");   // ← NEW
+const USERS_FILE = path.join(DATA_DIR, "users.xlsx");
 const SHEET      = "RDS";
 if (!fs.existsSync(DATA_DIR))  fs.mkdirSync(DATA_DIR,  { recursive: true });
 if (!fs.existsSync(IMAGE_DIR)) fs.mkdirSync(IMAGE_DIR, { recursive: true });
@@ -267,11 +256,10 @@ async function readAll() {
 }
 
 async function writeAll(rows) {
-  // writeAll is only used for bulk replace — not needed with Supabase (individual ops used)
   return true;
 }
 
-// ─── USERS HELPER ─────────────────────────────────────────  ← NEW
+// ─── USERS HELPER ─────────────────────────────────────────
 function readUsers() {
   return [
     { id: "EMP001", name: "Parth", email: "parth.patel4@adani.com", password: "123",  role: "admin",    department: "administration" },
@@ -281,10 +269,6 @@ function readUsers() {
 }
 
 // ─── STRUCTURED FIELD PARSERS ────────────────────────────
-/**
- * Attempt to parse a field value as JSON.
- * Returns the parsed object/array, or null if not parseable.
- */
 function tryParseJson(val) {
   if (typeof val !== "string") return null;
   const trimmed = val.trim();
@@ -292,10 +276,6 @@ function tryParseJson(val) {
   try { return JSON.parse(trimmed); } catch { return null; }
 }
 
-/**
- * Keys that contain structured JSON data and should be rendered as sub-tables.
- * Maps field key → renderer type.
- */
 const STRUCTURED_KEYS = new Set([
   "constructionMatrix","medicalGasMatrix","elvMatrix","doorConfig","windowConfig",
   "sanitaryFittings","itAccessories","coreSafetyMatrix","infectionControlMatrix",
@@ -306,9 +286,6 @@ const STRUCTURED_KEYS = new Set([
   "wallMountedDispensers","wasteBins","additionalFF","additionalFE"
 ]);
 
-/**
- * Convert a camelCase or snake_case key to a human-readable label.
- */
 function keyToLabel(k) {
   return k
     .replace(/([A-Z])/g, " $1")
@@ -317,19 +294,12 @@ function keyToLabel(k) {
     .trim();
 }
 
-/**
- * Flatten a nested object into rows: [{label, value}]
- * Handles: Medical Gas Matrix, Construction Matrix, ELV Matrix, Safety matrices, etc.
- */
 function flattenStructured(parsed, fieldKey) {
   const rows = [];
 
-  // ── Medical Gas Matrix ───────────────────────────────────
-  // { vacuum: { wall:1, pendant:0 }, oxygen: { pendant:1 } ... }
   if (fieldKey === "medicalGasMatrix" && typeof parsed === "object" && !Array.isArray(parsed)) {
     const gases = Object.keys(parsed);
     if (gases.length > 0) {
-      // Collect all location keys across all gases
       const locationKeys = new Set();
       gases.forEach(g => {
         if (typeof parsed[g] === "object") Object.keys(parsed[g]).forEach(k => locationKeys.add(k));
@@ -338,8 +308,6 @@ function flattenStructured(parsed, fieldKey) {
     }
   }
 
-  // ── ELV Matrix ───────────────────────────────────────────
-  // { selectedSystems: [...], quantities: { "LAN": { "WALL (W)": 0, ... } } }
   if (fieldKey === "elvMatrix" && typeof parsed === "object") {
     const systems = parsed.selectedSystems || [];
     const quantities = parsed.quantities || {};
@@ -348,15 +316,12 @@ function flattenStructured(parsed, fieldKey) {
     }
   }
 
-  // ── Construction Matrix ──────────────────────────────────
-  // { acoustics: {type,size,acoustic,thermal,protection,finish,notes}, wall1: {...}, floor: {...} }
   if (fieldKey === "constructionMatrix" && typeof parsed === "object" && !Array.isArray(parsed)) {
     const elements = Object.keys(parsed);
     const cols = ["type","size","acoustic","thermal","protection","finish","notes"];
     return { type: "constructionTable", elements, cols, data: parsed };
   }
 
-  // ── Door Config ──────────────────────────────────────────
   if (fieldKey === "doorConfig" && typeof parsed === "object" && !Array.isArray(parsed)) {
     Object.entries(parsed).forEach(([k, v]) => {
       const val = Array.isArray(v) ? v.join(", ") : String(v);
@@ -365,7 +330,6 @@ function flattenStructured(parsed, fieldKey) {
     return { type: "keyValue", rows };
   }
 
-  // ── Window Config ────────────────────────────────────────
   if (fieldKey === "windowConfig" && typeof parsed === "object" && !Array.isArray(parsed)) {
     Object.entries(parsed).forEach(([winKey, winVal]) => {
       if (typeof winVal === "object" && winVal !== null) {
@@ -378,7 +342,6 @@ function flattenStructured(parsed, fieldKey) {
     return { type: "keyValue", rows };
   }
 
-  // ── Sanitary Fittings ────────────────────────────────────
   if (fieldKey === "sanitaryFittings" && typeof parsed === "object" && !Array.isArray(parsed)) {
     const enabled = Object.entries(parsed)
       .filter(([, v]) => v === true || v === "true")
@@ -390,7 +353,6 @@ function flattenStructured(parsed, fieldKey) {
     return { type: "keyValue", rows };
   }
 
-  // ── IT Accessories ───────────────────────────────────────
   if (fieldKey === "itAccessories" && typeof parsed === "object" && !Array.isArray(parsed)) {
     Object.entries(parsed).forEach(([k, v]) => {
       if (typeof v === "object" && v !== null) {
@@ -403,8 +365,6 @@ function flattenStructured(parsed, fieldKey) {
     return { type: "keyValue", rows };
   }
 
-  // ── Safety / Infection Control matrices ─────────────────
-  // { pressureRegime: "Positive", biohazard: "BSL-4" }
   if (typeof parsed === "object" && !Array.isArray(parsed)) {
     Object.entries(parsed).forEach(([k, v]) => {
       const val = Array.isArray(v) ? v.join(", ") : String(v);
@@ -413,10 +373,8 @@ function flattenStructured(parsed, fieldKey) {
     return { type: "keyValue", rows };
   }
 
-  // ── Arrays ───────────────────────────────────────────────
   if (Array.isArray(parsed)) {
     if (parsed.every(i => typeof i === "object" && i !== null)) {
-      // Array of objects → key-value rows for each
       parsed.forEach((item, idx) => {
         const parts = Object.entries(item).map(([k, v]) => `${keyToLabel(k)}: ${v}`).join(" | ");
         rows.push({ label: `Item ${idx + 1}`, value: parts });
@@ -427,10 +385,10 @@ function flattenStructured(parsed, fieldKey) {
     return { type: "keyValue", rows };
   }
 
-  return null; // fall through to plain text
+  return null;
 }
 
-// ─── PDF BUILDER ─────────────────────────────────────────
+// ─── PDF BUILDER (FIXED: COL1/COL2/PAD defined at top) ─────────────────
 function buildPDF(rows) {
   return new Promise((resolve, reject) => {
     const doc    = new PDFDocument({ size: "A4", margin: 45, info: { Title: "Room Data Sheet", Author: "Medical College RDS System" } });
@@ -452,6 +410,12 @@ function buildPDF(rows) {
     const PAGE_H  = doc.page.height;
     const MARGIN  = 45;
     const CONTENT = PAGE_W - MARGIN * 2;
+
+    // --- FIX: define COL1, COL2, PAD at top ---
+    const COL1 = CONTENT * 0.38;
+    const COL2 = CONTENT * 0.62;
+    const PAD  = 6;
+    // -----------------------------------------
 
     const CRIT_COLORS = {
       Critical: "#dc2626", High: "#ea580c", Medium: "#ca8a04",
@@ -489,7 +453,6 @@ function buildPDF(rows) {
       doc.y = 50;
     }
 
-    // ── drawStructuredField: renders a field label + sub-table ──────────────
     function drawStructuredField(label, structured, rowIdx) {
       const INNER_MARGIN = MARGIN + COL1;
       const INNER_W = COL2;
@@ -499,16 +462,14 @@ function buildPDF(rows) {
       const HEADER_BG = "#1e3a8a";
       const ALT_ROW = "#f0f4ff";
 
-      // ── Key-Value sub-table ──────────────────────────────────────────────
       if (structured.type === "keyValue" && structured.rows.length > 0) {
         const subRows = structured.rows;
         const totalH = HDR_H + subRows.length * DATA_ROW_H + CELL_PAD * 2;
         const LABEL_ROW_H = Math.max(20 + PAD * 2, 28);
 
         ensureSpace(LABEL_ROW_H + totalH + 4);
-        y = doc.y;
+        let y = doc.y;
 
-        // Left label cell
         const bgLabel = rowIdx % 2 === 0 ? LGRAY : "#fafbfc";
         fillRect(MARGIN, y, COL1, LABEL_ROW_H + totalH, bgLabel);
         doc.save().strokeColor(BORDER).lineWidth(0.3)
@@ -518,21 +479,18 @@ function buildPDF(rows) {
            .text(label, MARGIN + 7, y + (LABEL_ROW_H + totalH - lh) / 2,
                  { width: COL1 - 14, lineBreak: false, ellipsis: true });
 
-        // Right value cell background
         fillRect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H + totalH, rowIdx % 2 === 0 ? WHITE : "#fdfdfd");
         doc.save().strokeColor(BORDER).lineWidth(0.3)
            .rect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H + totalH).stroke().restore();
         doc.save().strokeColor(BORDER).lineWidth(0.3)
            .moveTo(MARGIN + COL1, y).lineTo(MARGIN + COL1, y + LABEL_ROW_H + totalH).stroke().restore();
 
-        // Sub-table inside right cell
         const TX = INNER_MARGIN + CELL_PAD;
         const TW = INNER_W - CELL_PAD * 2;
         const COL_L = TW * 0.42;
         const COL_V = TW * 0.58;
         let ty = y + CELL_PAD;
 
-        // Sub-header
         fillRect(TX, ty, TW, HDR_H, HEADER_BG);
         doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(TX, ty, TW, HDR_H).stroke().restore();
         doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
@@ -555,16 +513,13 @@ function buildPDF(rows) {
           ty += DATA_ROW_H;
         });
 
-        y = y + LABEL_ROW_H + totalH;
-        doc.y = y;
+        doc.y = y + LABEL_ROW_H + totalH;
         return;
       }
 
-      // ── Tag/chip list (e.g. Sanitary Fittings) ─────────────────────────
       if (structured.type === "tagList" && structured.items.length > 0) {
         const CHIP_H = 14, CHIP_GAP = 4, CHIP_PAD_X = 6;
         const availW = INNER_W - CELL_PAD * 2;
-        // Measure chips and wrap into lines
         const lines = [];
         let currentLine = [], currentW = 0;
         structured.items.forEach(item => {
@@ -584,9 +539,8 @@ function buildPDF(rows) {
         const LABEL_ROW_H = Math.max(totalH, 28);
 
         ensureSpace(LABEL_ROW_H + 4);
-        y = doc.y;
+        let y = doc.y;
 
-        // Left label
         const bgLabel = rowIdx % 2 === 0 ? LGRAY : "#fafbfc";
         fillRect(MARGIN, y, COL1, LABEL_ROW_H, bgLabel);
         doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, COL1, LABEL_ROW_H).stroke().restore();
@@ -594,7 +548,6 @@ function buildPDF(rows) {
         doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
            .text(label, MARGIN + 7, y + (LABEL_ROW_H - lh) / 2, { width: COL1 - 14, lineBreak: false, ellipsis: true });
 
-        // Right value cell
         fillRect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H, rowIdx % 2 === 0 ? WHITE : "#fdfdfd");
         doc.save().strokeColor(BORDER).lineWidth(0.3).rect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H).stroke().restore();
         doc.save().strokeColor(BORDER).lineWidth(0.3)
@@ -614,12 +567,10 @@ function buildPDF(rows) {
           cy += CHIP_H + CHIP_GAP;
         });
 
-        y = y + LABEL_ROW_H;
-        doc.y = y;
+        doc.y = y + LABEL_ROW_H;
         return;
       }
 
-      // ── Medical Gas Point Schedule table ────────────────────────────────
       if (structured.type === "medGasTable") {
         const { gases, locationKeys, data: gasData } = structured;
         const COL_GAS = 110;
@@ -629,18 +580,15 @@ function buildPDF(rows) {
         const GAS_ROW_H = 14;
         const totalH = HDR_R_H * 2 + gases.length * GAS_ROW_H + 2;
 
-        // Label row spanning full width
         ensureSpace(20 + totalH + 8);
-        y = doc.y;
+        let y = doc.y;
 
-        // Field label bar (full width)
         fillRect(MARGIN, y, CONTENT, 20, "#e0e7ff");
         doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, 20).stroke().restore();
         doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY)
            .text(label, MARGIN + 7, y + 6, { width: CONTENT - 14, lineBreak: false });
         y += 20;
 
-        // Table header row 1: GAS/SERVICE + location group headers
         fillRect(MARGIN, y, COL_GAS, HDR_R_H, HEADER_BG);
         doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(MARGIN, y, COL_GAS, HDR_R_H).stroke().restore();
         doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
@@ -655,7 +603,6 @@ function buildPDF(rows) {
         });
         y += HDR_R_H;
 
-        // Gas rows
         gases.forEach((gas, gi) => {
           const bg = gi % 2 === 0 ? WHITE : ALT_ROW;
           fillRect(MARGIN, y, COL_GAS, GAS_ROW_H, bg);
@@ -676,11 +623,9 @@ function buildPDF(rows) {
         });
 
         doc.y = y + 4;
-        y = doc.y;
         return;
       }
 
-      // ── Construction Element Schedule table ──────────────────────────────
       if (structured.type === "constructionTable") {
         const { elements, cols, data: conData } = structured;
         const COL_ELEM = 90;
@@ -690,16 +635,14 @@ function buildPDF(rows) {
         const totalH = HDR_R_H + elements.length * EL_ROW_H + 2;
 
         ensureSpace(20 + totalH + 8);
-        y = doc.y;
+        let y = doc.y;
 
-        // Field label bar
         fillRect(MARGIN, y, CONTENT, 20, "#e0e7ff");
         doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, 20).stroke().restore();
         doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY)
            .text(label, MARGIN + 7, y + 6, { width: CONTENT - 14, lineBreak: false });
         y += 20;
 
-        // Header
         fillRect(MARGIN, y, COL_ELEM, HDR_R_H, HEADER_BG);
         doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(MARGIN, y, COL_ELEM, HDR_R_H).stroke().restore();
         doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
@@ -733,14 +676,11 @@ function buildPDF(rows) {
         });
 
         doc.y = y + 4;
-        y = doc.y;
         return;
       }
 
-      // ── ELV Matrix table ────────────────────────────────────────────────
       if (structured.type === "elvTable") {
         const { systems, quantities } = structured;
-        // Location types
         const locKeys = ["WALL (W)", "BEDHEAD PANEL (BHP)", "MEDICAL PENDANT (MP)", "CEILING (C)"];
         const LOC_LABELS = ["WALL", "BHP", "MP", "CEIL"];
         const COL_SYS = 130;
@@ -750,16 +690,14 @@ function buildPDF(rows) {
         const totalH = HDR_R_H + systems.length * SYS_ROW_H + 2;
 
         ensureSpace(20 + totalH + 8);
-        y = doc.y;
+        let y = doc.y;
 
-        // Field label bar
         fillRect(MARGIN, y, CONTENT, 20, "#e0e7ff");
         doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, 20).stroke().restore();
         doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY)
            .text(label, MARGIN + 7, y + 6, { width: CONTENT - 14, lineBreak: false });
         y += 20;
 
-        // Header
         fillRect(MARGIN, y, COL_SYS, HDR_R_H, HEADER_BG);
         doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(MARGIN, y, COL_SYS, HDR_R_H).stroke().restore();
         doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
@@ -793,14 +731,15 @@ function buildPDF(rows) {
         });
 
         doc.y = y + 4;
-        y = doc.y;
         return;
       }
 
-      // ── Fallback: render as plain text row ───────────────────────────────
-      const ROW_H = rowHeights[pairs.findIndex(([l]) => l === label)] || 24;
+      // Fallback plain text rendering
+      // (this part is rarely used because structured types are handled above)
+      // But we implement it for completeness.
+      const ROW_H = 24;
       ensureSpace(ROW_H + 2);
-      y = doc.y;
+      let y = doc.y;
       const bgLabel = rowIdx % 2 === 0 ? LGRAY : "#fafbfc";
       fillRect(MARGIN, y, COL1, ROW_H, bgLabel);
       fillRect(MARGIN + COL1, y, COL2, ROW_H, rowIdx % 2 === 0 ? WHITE : "#fdfdfd");
@@ -811,10 +750,10 @@ function buildPDF(rows) {
          .text(label, MARGIN + 7, y + PAD, { width: COL1 - 14, lineBreak: false, ellipsis: true });
       doc.font("Helvetica").fontSize(9).fillColor(TEXT)
          .text(String(structured || ""), MARGIN + COL1 + 7, y + PAD, { width: COL2 - 14, lineBreak: true });
-      y = y + ROW_H;
-      doc.y = y;
+      doc.y = y + ROW_H;
     }
 
+    // Main rendering loop over each room
     rows.forEach((r, rIdx) => {
       if (rIdx > 0) doc.addPage();
       const d      = r.data || {};
@@ -898,33 +837,26 @@ function buildPDF(rows) {
         }
       }
 
+      // Section loop
       SECTIONS.forEach(sec => {
         const pairs = sec.keys
           .filter(k => d[k] != null && String(d[k]).trim() !== "")
           .map(k => [toLabel(k), formatFieldValue(k, d[k])]);
         if (!pairs.length) return;
 
-        const COL1 = CONTENT * 0.38;
-        const COL2 = CONTENT * 0.62;
-        const PAD  = 6; // vertical padding inside each cell
-
-        // ── Pre-measure every row so we know exact heights before drawing ──
+        // Pre-measure rows
         const rowHeights = pairs.map(([label, value]) => {
-          // Measure label (single line, ellipsis if needed — height is fixed)
           const labelH = doc.font("Helvetica-Bold").fontSize(8.5)
             .heightOfString(label, { width: COL1 - 14 });
-          // Measure value with wrapping enabled
           const valueH = doc.font("Helvetica").fontSize(9)
             .heightOfString(value, { width: COL2 - 14 });
           return Math.max(labelH, valueH) + PAD * 2;
         });
 
-        // Section header needs 20px; estimate conservatively for ensureSpace
         ensureSpace(20 + Math.min(rowHeights[0] || 20, 60) + 12);
 
-        y = doc.y;
+        let y = doc.y;
 
-        // ── Section header bar ──────────────────────────────────────────
         fillRect(MARGIN, y, CONTENT, 20, NAVY);
         doc.font("Helvetica-Bold").fontSize(9).fillColor(WHITE)
            .text(sec.label.toUpperCase(), MARGIN + 8, y + 6, { width: CONTENT - 16 });
@@ -938,7 +870,6 @@ function buildPDF(rows) {
           const structured = parsed ? flattenStructured(parsed, rawKey) : null;
 
           if (structured) {
-            // ── Structured field: render label bar + sub-table ─────────
             drawStructuredField(label, structured, i);
           } else {
             const ROW_H = rowHeights[i];
@@ -971,7 +902,7 @@ function buildPDF(rows) {
           }
         });
 
-        doc.y += 8; // breathing room after each section
+        doc.y += 8;
       });
 
       ensureSpace(20);
@@ -1046,10 +977,8 @@ function buildExcel(rows) {
 
 // ─── ROUTES ──────────────────────────────────────────────
 
-// Health check
 app.get("/", (_req, res) => res.json({ status:"ok", version:"4.0.0", timestamp:new Date() }));
 
-// ─── AUTH LOGIN ───────────────────────────────────────────  ← NEW
 app.post("/auth/login", (req, res) => {
   try {
     const { email, password } = req.body;
@@ -1079,8 +1008,6 @@ app.post("/auth/login", (req, res) => {
   }
 });
 
-
-// GET all records
 app.get("/data", async (req, res) => {
   try {
     let rows = await readAll();
@@ -1105,7 +1032,6 @@ app.get("/data", async (req, res) => {
   } catch(e){console.error(e);res.status(500).json({error:"Failed to read data"});}
 });
 
-// GET single record
 app.get("/data/:id", async (req, res) => {
   try {
     const { data, error } = await supabase.from("rds_rooms").select("*").eq("id", req.params.id).single();
@@ -1115,7 +1041,6 @@ app.get("/data/:id", async (req, res) => {
   } catch{res.status(500).json({error:"Failed to fetch record"});}
 });
 
-// POST save
 app.post("/save", async (req, res) => {
   try {
     const newData = req.body;
@@ -1138,7 +1063,6 @@ app.post("/save", async (req, res) => {
     if (imagePath) newData.imagePath = imagePath;
 
     const now = Date.now();
-    // Check duplicate
     const { data: existing } = await supabase.from("rds_rooms")
       .select("id").eq("roomcode", roomCode)
       .gte("id", now - 30000).limit(1);
@@ -1165,7 +1089,6 @@ app.post("/save", async (req, res) => {
     saved.data = safeJson(saved.data);
     console.log(`✓ Saved id=${now} roomCode=${roomCode}`);
 
-    // Audit log
     await logAudit({
       roomId:      now,
       roomCode,
@@ -1181,10 +1104,8 @@ app.post("/save", async (req, res) => {
   }
 });
 
-// PUT update
 app.put("/data/:id", async (req, res) => {
   try {
-    // Fetch old data first for diff
     const { data: oldRow } = await supabase.from("rds_rooms").select("*").eq("id", req.params.id).single();
     const oldData = oldRow?.data ? (typeof oldRow.data === "string" ? safeJson(oldRow.data) : oldRow.data) : {};
 
@@ -1198,7 +1119,6 @@ app.put("/data/:id", async (req, res) => {
     const { data, error } = await supabase.from("rds_rooms").update(updates).eq("id", req.params.id).select().single();
     if (error) throw error;
 
-    // Compute field-level diff
     const newData = req.body;
     const IGNORE  = new Set(["_editedBy","_submittedBy","roomImage","imagePath"]);
     const changes = {};
@@ -1226,7 +1146,6 @@ app.put("/data/:id", async (req, res) => {
   } catch{res.status(500).json({error:"Failed to update"});}
 });
 
-// DELETE
 app.delete("/data/:id", async (req, res) => {
   try {
     const { data: room } = await supabase.from("rds_rooms").select("roomcode,roomname").eq("id", req.params.id).single();
@@ -1245,7 +1164,6 @@ app.delete("/data/:id", async (req, res) => {
   }
 });
 
-// GET audit log for a room
 app.get("/audit/:roomId", async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -1260,7 +1178,6 @@ app.get("/audit/:roomId", async (req, res) => {
   }
 });
 
-// GET stats
 app.get("/stats", async (_req, res) => {
   try {
     const rows = await readAll();
@@ -1275,7 +1192,6 @@ app.get("/stats", async (_req, res) => {
   } catch{res.status(500).json({error:"Failed to compute stats"});}
 });
 
-// GET filter options
 app.get("/filter-options", async (_req, res) => {
   try {
     const rows = await readAll();
@@ -1287,9 +1203,6 @@ app.get("/filter-options", async (_req, res) => {
   } catch{res.status(500).json({error:"Failed to fetch options"});}
 });
 
-// ─── EXCEL EXPORTS ────────────────────────────────────────
-
-// ── Save buffer to Supabase Storage ──────────────────────
 async function saveToStorage(buf, filename, mimetype) {
   try {
     const { error } = await supabase.storage
@@ -1300,7 +1213,6 @@ async function saveToStorage(buf, filename, mimetype) {
   } catch(e) { console.warn("Storage upload failed:", e.message); }
 }
 
-// ── Clean room name for use in filename ──────────────────
 function cleanName(row) {
   const name = row.roomname || row.roomName ||
     (row.data ? (typeof row.data === "string" ? JSON.parse(row.data) : row.data)?.roomName : "") || "Room";
@@ -1338,8 +1250,6 @@ app.get("/export/excel/:id", async (req, res) => {
 });
 
 app.get("/export/csv", (_req, res) => res.redirect("/export/excel"));
-
-// ─── PDF EXPORTS ──────────────────────────────────────────
 
 app.get("/export/pdf", async (req, res) => {
   try {
@@ -1379,7 +1289,9 @@ app.get("/export/pdf/:id", async (req, res) => {
   }
 });
 
-// ─── AI EXTRACT ROUTE ─────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// AI EXTRACTION ROUTE (unchanged from your original)
+// ─────────────────────────────────────────────────────────────────────────────
 const FIELD_LIST = `projectName,projectCode,type,department,departmentCode,category,categoryCode,roomName,roomCode,location,roomTypology,criticalityLevel,infectionRiskCategory,isolationType,netArea,minimumDimension,clearance,floorToSoffitHeight,floorToCeilingHeight,doorType,doorSize,accessibilityCompliance,hazardousStorage,radiationShielding,vibrationIsolation,magneticShielding,soundInsulation,rfShielding,equipmentMountingSupport,structuralFloorDrop,otherSpecialNeeds,constructionMatrix,floor,floorSpec,skirting,walls,wallsSpec,ceiling,ceilingSpec,wallProtection,wallProtectionNotes,internalGlazing,hatches,specialFinishes,doorConfig,windowConfig,sanitaryFittings,lightingControl,lightingControlNotes,lightingLevelStandard,lightingLevelTreatment,lightingLevelOther,lightFitT5Fluorescent,lightFitLEDTube,lightFitLEDStrip,lightFitCompactPL,lightFitLEDDownlight,lightFitBiophilic,lightFitCeilingLight,lightFitOthers,lightFittingNotes,ctrlOnOff,ctrlTimer,ctrlMotionSensor,ctrlPhotosensor,ctrlLMS,ctrlOthers,lightingControlDeviceNotes,furnitureLaboratoryBenches,furnitureSystemFurniture,furnitureLooseChairs,furnitureModularCabin,furnitureCustom,furnitureFixedBench,furnitureLockers,furnitureCoatHooks,furnitureBulletinBoard,furnitureMarkerBoard,furnitureHandRail,furnitureOthers,furnitureNotes,cabBuiltInIntegrated,cabMobilePedestal,cabOverheadCabinets,cabUndercountCabinets,cabOpenShelvesOverhead,cabOpenShelvesUnder,cabFullHeightCabinets,cabFullHeightShelving,cabInventoryStocked,cabOthers,cabinetryNotes,fumeFloorVertical1200,fumeFloorVertical1500,fumeFloorVertical1800,fumeWalkIn1200,fumeWalkIn1500,fumeWalkIn1800,fumePortable1200,fumePortable1500,fumePortable1800,fumeNotes,roomFunction,keyActivities,userGroups,operationalScenarios,patientZone,staffZone,equipmentZone,cleanZone,dirtyZone,patientFlow,staffFlow,materialFlow,entryPoints,restrictedZones,medicalGasMatrix,patientCapacity,staffRequirement,peakLoad,throughput,averageStayTime,surgeCapacity,operationalHours,mustBeAdjacent,shouldBeAdjacent,avoidAdjacency,airChangesACH,pressure,temperature,humidity,filtration,providedFanInRoom,airflowDirection,naturalVentilation,mechanicalVentilation,smokeExtraction,pandemicMode,powerLoad,normalPower,emergencyPower,ups,numberOfSockets,specialOutlets,ssoMatrix,isolatorMatrix,equip_dedicatedCircuit,equip_upsBackup,equip_vibrationIsolation,equip_bmsInterface,equip_isolatedGrounding,equip_humidityControl,equip_remoteMonitoring,equip_voltageStabilizer,equip_antiStaticFlooring,equip_fireRatedEnclosure,equip_fireAlarmInterface,equip_gasDetection,oxygen,medicalAir,vacuum,nitrousOxide,handWash,wc,shower,plumbingSpecialSystems,hisEmr,pacs,lis,rtls,nurseCall,cctv,iotSensors,aiAnalytics,elvMatrix,itAccessories,coreSafetyMatrix,infectionControlMatrix,plumbingFixturesMatrix,fireLifeSafetyMatrix,electricalSafetyMatrix,physicalSecurityMatrix,chemHazardMatrix,safetyAdditionalNotes,pressureRegime,isolationLevel,radiationProtection,biohazardHandling,fireSafety,emergencySystems,lightingQuality,lightingNotes,acousticControl,acousticNotes,thermalOdorControl,thermalOdorNotes,patientComfort,patientComfortNotes,privacy,familyInteraction,familyInteractionNotes,visualEnvironment,visualEnvironmentNotes,biophiliaHealingEnvironment,biophiliaHealingNotes,technologyInfotainment,technologyInfotainmentNotes,infectionControlHygiene,infectionControlHygieneNotes,airFlowmeter,oxygenFlowmeter,suctionAdapterLowFlow,suctionBottle,oxygenFlowmeterLowFlow,trolleyProcedure,blenderAirOxygen,stoolAdjustableMobile,curtainTrackSystem,ivHook,patientFurniture,staffVisitorFurniture,storageFurniture,wallMountedDispensers,wasteBins,additionalFF,infusionPumpSyringe,examinationLight,physiologicMonitor,infantIncubator,phototherapyLamp,supplyUnitCeiling,infusionPumpEnteral,infusionPumpSingleChannel,ventilatorNeonatal,medicalEquipments,wallMountedDiagnostics,itCommunicationHardware,nurseCallSystems,additionalFE,wmBiohazard,wmRadioactive,wmFlammableSolvent,wmChemicalWaste,wmHumanAnatomical,wmMicrobiologyWaste,wmWasteSharps,wmCytotoxicDrugs,wmSoiledWaste,wmSolidWaste,wmLiquidWaste,wmDiscardedContainers,wmUsedOil,wmEwaste,wmConfidentialPaper,wmFoodPantryWaste,wmOthers1,wmOthers2,wmNotes`;
 
 const SYSTEM_PROMPT = `You are an expert at extracting Room Data Sheet (RDS) data from documents.
@@ -1683,27 +1595,12 @@ ${textContent.slice(0, 28000)}` }
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AI VALIDATION ENGINE — paste this block into backend/index.js
-// PLACE IT just before the "404 / ERROR" section at the bottom of index.js
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// SETUP REQUIRED:
-//   1. npm install node-fetch  (if not already installed)
-//   2. Add to Render env vars:  TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxx
-//   3. Run this SQL in Supabase:
-//        CREATE TABLE IF NOT EXISTS rds_validations (
-//          id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-//          room_id     text NOT NULL,
-//          room_code   text,
-//          report      jsonb,
-//          created_at  timestamptz DEFAULT now()
-//        );
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// AI VALIDATION ENGINE (with Tavily web search and 13 agents)
+// =============================================================================
 
 const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
- 
-// ── 13 Agent Definitions ──────────────────────────────────────────────────────
+
 const AGENT_CONFIGS = [
   {
     id: 1,
@@ -1713,11 +1610,11 @@ const AGENT_CONFIGS = [
       `isolation type ${data.isolationType || "clinical room"} hospital infection control standards India 2025`
     ],
     systemPrompt: `You are a senior healthcare facility planner specializing in clinical classification standards (NABH, JCI, HTM, HBN, FGI).
- 
+
 IMPORTANT SCOPE RULE: This section has two subsections — "Project & Room Identification" (projectName, projectCode, type, department, departmentCode, category, categoryCode, roomName, roomCode) and "Clinical Classification" (criticalityLevel, infectionRiskCategory, isolationType).
- 
+
 You MUST ONLY validate and suggest improvements for the CLINICAL CLASSIFICATION fields: criticalityLevel, infectionRiskCategory, and isolationType. Do NOT comment on or suggest changes to any Project & Room Identification fields — those are user-defined administrative codes.
- 
+
 For the three clinical classification fields, validate whether the selected values are appropriate for the room type, check for mismatches (e.g. a critical care room with Low criticality), and suggest better options with clinical rationale. Always include "In place of X, consider Y because..." style replacement suggestions.`
   },
   {
@@ -1728,12 +1625,12 @@ For the three clinical classification fields, validate whether the selected valu
       `hospital ${data.roomTypology || "clinical"} room door type acoustic wall construction standards 2025`
     ],
     systemPrompt: `You are an expert healthcare architect specializing in clinical space planning per FGI Guidelines 2022, HTM, HBN, NABH, and NBC India.
- 
+
 Analyse ALL filled fields across ALL subsections of this section:
 - Spatial Requirements: netArea, minimumDimension, clearance, floorToSoffitHeight, floorToCeilingHeight, doorType, doorSize, accessibilityCompliance
 - Special Construction: hazardousStorage, radiationShielding, vibrationIsolation, magneticShielding, soundInsulation, rfShielding, equipmentMountingSupport, structuralFloorDrop, otherSpecialNeeds
 - Construction Details (constructionMatrix): wall types (wall1–wall4), ceiling, floor, skirting, visionPanel, acoustics — validate materials for each element
- 
+
 For every filled field, check compliance with current standards. For every issue or outdated choice, always include: "In place of [current], consider [modern alternative] because [clinical/technical reason]." Cover the entire section, not just one part.`
   },
   {
