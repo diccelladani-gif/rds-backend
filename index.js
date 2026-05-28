@@ -428,44 +428,78 @@ function buildPDF(rows) {
           .map(k => [toLabel(k), formatFieldValue(k, d[k])]);
         if (!pairs.length) return;
 
-        const needed = 24 + pairs.length * 20 + 12;
-        ensureSpace(needed);
+        const COL1 = CONTENT * 0.38;
+        const COL2 = CONTENT * 0.62;
+        const PAD  = 6; // vertical padding inside each cell
+
+        // ── Pre-measure every row so we know exact heights before drawing ──
+        const rowHeights = pairs.map(([label, value]) => {
+          // Measure label (single line, ellipsis if needed — height is fixed)
+          const labelH = doc.font("Helvetica-Bold").fontSize(8.5)
+            .heightOfString(label, { width: COL1 - 14 });
+          // Measure value with wrapping enabled
+          const valueH = doc.font("Helvetica").fontSize(9)
+            .heightOfString(value, { width: COL2 - 14 });
+          return Math.max(labelH, valueH) + PAD * 2;
+        });
+
+        // Section header needs 20px; estimate conservatively for ensureSpace
+        ensureSpace(20 + Math.min(rowHeights[0] || 20, 60) + 12);
 
         y = doc.y;
 
+        // ── Section header bar ──────────────────────────────────────────
         fillRect(MARGIN, y, CONTENT, 20, NAVY);
         doc.font("Helvetica-Bold").fontSize(9).fillColor(WHITE)
            .text(sec.label.toUpperCase(), MARGIN + 8, y + 6, { width: CONTENT - 16 });
         y += 20;
-
-        const COL1 = CONTENT * 0.38;
-        const COL2 = CONTENT * 0.62;
+        doc.y = y;
 
         pairs.forEach(([label, value], i) => {
-          const valLines = Math.ceil(value.length / 68) || 1;
-          const ROW_H    = Math.max(18, valLines * 13 + 6);
+          const ROW_H = rowHeights[i];
 
+          // If this row won't fit on the current page, add a new page.
+          // After the page break we must re-draw nothing (no orphan header);
+          // the section already has its header above — that's acceptable.
           ensureSpace(ROW_H + 2);
           y = doc.y;
 
-          fillRect(MARGIN,         y, COL1, ROW_H, i % 2 === 0 ? LGRAY : "#fafbfc");
-          fillRect(MARGIN + COL1,  y, COL2, ROW_H, i % 2 === 0 ? WHITE : "#fdfdfd");
+          // ── Background fills ──────────────────────────────────────────
+          const bgLabel = i % 2 === 0 ? LGRAY    : "#fafbfc";
+          const bgValue = i % 2 === 0 ? WHITE    : "#fdfdfd";
+          fillRect(MARGIN,        y, COL1, ROW_H, bgLabel);
+          fillRect(MARGIN + COL1, y, COL2, ROW_H, bgValue);
+
+          // ── Outer border + bottom separator ──────────────────────────
           doc.save().strokeColor(BORDER).lineWidth(0.3)
              .rect(MARGIN, y, CONTENT, ROW_H).stroke().restore();
-          hLine(y + ROW_H, BORDER, 0.3);
 
+          // ── Vertical divider between label and value columns ──────────
+          doc.save().strokeColor(BORDER).lineWidth(0.3)
+             .moveTo(MARGIN + COL1, y)
+             .lineTo(MARGIN + COL1, y + ROW_H)
+             .stroke().restore();
+
+          // ── Label (vertically centred, single line with ellipsis) ─────
+          const labelTextH = doc.font("Helvetica-Bold").fontSize(8.5)
+            .heightOfString(label, { width: COL1 - 14 });
+          const labelY = y + (ROW_H - labelTextH) / 2;
           doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
-             .text(label, MARGIN + 7, y + (ROW_H - 10) / 2,
+             .text(label, MARGIN + 7, labelY,
                    { width: COL1 - 14, lineBreak: false, ellipsis: true });
 
+          // ── Value (top-aligned, wrapping) ─────────────────────────────
           doc.font("Helvetica").fontSize(9).fillColor(TEXT)
-             .text(value, MARGIN + COL1 + 7, y + 5,
+             .text(value, MARGIN + COL1 + 7, y + PAD,
                    { width: COL2 - 14, lineBreak: true });
 
-          doc.y = y + ROW_H;
+          // Advance cursor to the bottom of the drawn row — never trust
+          // doc.y here because the value text may have moved it further.
+          y = y + ROW_H;
+          doc.y = y;
         });
 
-        doc.y += 6;
+        doc.y += 8; // breathing room after each section
       });
 
       ensureSpace(20);
