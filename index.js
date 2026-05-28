@@ -274,7 +274,7 @@ async function writeAll(rows) {
 // ─── USERS HELPER ─────────────────────────────────────────  ← NEW
 function readUsers() {
   return [
-    { id: "EMP001", name: "Parth", email: "parth@rds.med", password: "123",  role: "admin",    department: "administration" },
+    { id: "EMP001", name: "Parth", email: "parth.patel4@adani.com", password: "123",  role: "admin",    department: "administration" },
     { id: "EMP002", name: "Ravi",  email: "ravi@rds.med",  password: "1234", role: "reviewer", department: "clinical"       },
     { id: "EMP003", name: "Healthcare",  email: "healthcare@rds.med",  password: "123", role: "reviewer", department: "clinical"       },
   ];
