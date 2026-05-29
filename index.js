@@ -1855,7 +1855,7 @@ async function tavilySearch(query) {
     return (json.results || []).map(r => ({
       title: r.title,
       url: r.url,
-      snippet: r.content?.slice(0, 300)
+      snippet: r.content?.slice(0, 150)
     }));
   } catch (e) {
     console.warn(`Tavily search failed for "${query}":`, e.message);
@@ -1884,7 +1884,7 @@ ROOM CONTEXT:
  
 SECTION: ${agentConfig.section}
 SECTION DATA (what the user filled):
-${JSON.stringify(sectionData, null, 2)}
+${JSON.stringify(sectionData)}
  
 LATEST INDUSTRY RESEARCH (from web):
 ${searchContext}
@@ -1916,7 +1916,7 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
   // 3. Call Groq
   const completion = await groq.chat.completions.create({
     model: "llama-3.3-70b-versatile",
-    max_tokens: 1200,
+    max_tokens: 900,
     temperature: 0.3,
     messages: [
       { role: "system", content: agentConfig.systemPrompt },
@@ -1993,29 +1993,37 @@ app.post("/validate-rds", async (req, res) => {
       roomCode:        fullData.roomCode         || room.roomcode     || ""
     };
  
-    console.log(`[Validation] Starting 13-agent validation for room ${roomContext.roomCode}...`);
- 
-    // Run all 13 agents in parallel
-    const agentPromises = AGENT_CONFIGS.map((agentConfig, idx) => {
-      const sectionDef  = SECTIONS[idx];
-      const sectionData = sectionDef
-        ? extractSectionData(fullData, sectionDef.keys)
-        : {};
-      return runSectionAgent(agentConfig, sectionData, roomContext, groq)
-        .catch(err => ({
-          sectionId: agentConfig.id,
-          section:   agentConfig.section,
-          valid:     true,
-          confidence: 40,
-          summary:   `Agent encountered an error: ${err.message}`,
-          issues:    [],
-          suggestions: [],
-          sources:   []
-        }));
-    });
- 
-    const sectionResults = await Promise.all(agentPromises);
-    console.log(`[Validation] All 13 agents completed for ${roomContext.roomCode}`);
+    console.log(`[Validation] Starting validation for room ${roomContext.roomCode}...`);
+
+// Run agents in batches of 4 to avoid TPM burst (429s)
+async function runBatch(configs, startIdx) {
+  return Promise.all(configs.map((agentConfig, i) => {
+    const idx = startIdx + i;
+    const sectionDef  = SECTIONS[idx];
+    const sectionData = sectionDef ? extractSectionData(fullData, sectionDef.keys) : {};
+    return runSectionAgent(agentConfig, sectionData, roomContext, groq)
+      .catch(err => ({
+        sectionId: agentConfig.id,
+        section:   agentConfig.section,
+        valid:     true,
+        confidence: 40,
+        summary:   `Agent error: ${err.message}`,
+        issues:    [],
+        suggestions: [],
+        sources:   []
+      }));
+  }));
+}
+
+const BATCH_SIZE = 4;
+const sectionResults = [];
+for (let i = 0; i < AGENT_CONFIGS.length; i += BATCH_SIZE) {
+  const batch = AGENT_CONFIGS.slice(i, i + BATCH_SIZE);
+  const results = await runBatch(batch, i);
+  sectionResults.push(...results);
+  if (i + BATCH_SIZE < AGENT_CONFIGS.length) await new Promise(r => setTimeout(r, 2500));
+}
+console.log(`[Validation] All agents completed for ${roomContext.roomCode}`);
  
     // Consolidate report
     const totalConfidence   = Math.round(sectionResults.reduce((s, r) => s + (r.confidence || 0), 0) / 13);
