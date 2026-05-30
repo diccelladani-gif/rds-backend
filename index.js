@@ -2102,6 +2102,54 @@ app.get("/validate-rds/:roomId", async (req, res) => {
   }
 });
 
+// ─── POST /apply-suggestions ─────────────────────────────────────────────────
+app.post("/apply-suggestions", async (req, res) => {
+  try {
+    const { roomId, suggestions } = req.body;
+    if (!roomId || !suggestions?.length)
+      return res.status(400).json({ error: "roomId and suggestions required" });
+
+    const { data: room, error: fetchError } = await supabase
+      .from("rds_rooms").select("*").eq("id", String(roomId)).single();
+    if (fetchError || !room)
+      return res.status(404).json({ error: "Room not found" });
+
+    const fullData = typeof room.data === "string" ? safeJson(room.data) : (room.data || {});
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      max_tokens: 400,
+      temperature: 0,
+      messages: [{
+        role: "user",
+        content: `Extract the exact form field value from each suggestion. Return ONLY a flat JSON object like {"fieldName":"value"}. No markdown, no explanation.
+Rules: numeric fields → number as string. Yes/No fields → "Yes" or "No". If value cannot be confidently extracted, skip that field.
+Suggestions:
+${JSON.stringify(suggestions.map(s => ({ field: s.field, recommendation: s.recommendation })))}`
+      }]
+    });
+
+    const raw = completion.choices[0]?.message?.content || "{}";
+    const cleaned = raw.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
+    const extracted = JSON.parse(cleaned);
+
+    const updatedData = { ...fullData, ...extracted };
+
+    const { error: updateError } = await supabase
+      .from("rds_rooms").update({ data: updatedData }).eq("id", String(roomId));
+    if (updateError)
+      return res.status(500).json({ error: "Failed to save: " + updateError.message });
+
+    console.log(`[ApplySuggestions] Applied ${Object.keys(extracted).length} fields to room ${roomId}`);
+    res.json({ success: true, appliedFields: Object.keys(extracted) });
+
+  } catch (e) {
+    console.error("[ApplySuggestions] Error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── 404 / ERROR ─────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ error: "Route not found" }));
 app.use((err, _req, res, _next) => {
