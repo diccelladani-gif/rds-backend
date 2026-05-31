@@ -2119,30 +2119,46 @@ app.post("/apply-suggestions", async (req, res) => {
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
-      max_tokens: 400,
+      max_tokens: 500,
       temperature: 0,
       messages: [{
         role: "user",
-        content: `Extract the exact form field value from each suggestion. Return ONLY a flat JSON object like {"fieldName":"value"}. No markdown, no explanation.
-Rules: numeric fields → number as string. Yes/No fields → "Yes" or "No". If value cannot be confidently extracted, skip that field.
+        content: `You are processing hospital room design suggestions. For each suggestion, decide if it has a concrete extractable value OR is qualitative/advisory.
+Return ONLY a JSON object with two keys:
+{
+  "fieldValues": { "fieldName": "value" },
+  "qualitativeNotes": { "sectionId": "combined note text for that section" }
+}
+No markdown, no explanation.
+Rules for fieldValues: numeric → number as string. Yes/No → "Yes" or "No". Select → closest matching option. Skip if value cannot be confidently extracted.
+Rules for qualitativeNotes: group advisory suggestions by sectionId into one readable sentence or two per section. Skip sections with no qualitative suggestions.
 Suggestions:
-${JSON.stringify(suggestions.map(s => ({ field: s.field, recommendation: s.recommendation })))}`
+${JSON.stringify(suggestions.map(s => ({ field: s.field, recommendation: s.recommendation, sectionId: s.sectionId, reason: s.reason })))}`
       }]
     });
 
     const raw = completion.choices[0]?.message?.content || "{}";
     const cleaned = raw.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
-    const extracted = JSON.parse(cleaned);
+    const { fieldValues = {}, qualitativeNotes = {} } = JSON.parse(cleaned);
 
-    const updatedData = { ...fullData, ...extracted };
+    // Merge field values into room data
+    const updatedData = { ...fullData, ...fieldValues };
+
+    // Merge qualitative notes into existing validationNotes (don't overwrite unrelated sections)
+    const existingNotes = fullData.validationNotes || {};
+    const mergedNotes = { ...existingNotes };
+    for (const [sectionId, note] of Object.entries(qualitativeNotes)) {
+      mergedNotes[sectionId] = note;
+    }
+    updatedData.validationNotes = mergedNotes;
 
     const { error: updateError } = await supabase
       .from("rds_rooms").update({ data: updatedData }).eq("id", String(roomId));
     if (updateError)
       return res.status(500).json({ error: "Failed to save: " + updateError.message });
 
-    console.log(`[ApplySuggestions] Applied ${Object.keys(extracted).length} fields to room ${roomId}`);
-    res.json({ success: true, appliedFields: Object.keys(extracted) });
+    console.log(`[ApplySuggestions] Applied ${Object.keys(fieldValues).length} fields + ${Object.keys(qualitativeNotes).length} section notes to room ${roomId}`);
+    res.json({ success: true, appliedFields: Object.keys(fieldValues), notedSections: Object.keys(qualitativeNotes) });
 
   } catch (e) {
     console.error("[ApplySuggestions] Error:", e.message);
