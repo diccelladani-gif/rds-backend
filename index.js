@@ -693,7 +693,8 @@ function buildPDF(rows) {
 
     // ── TAG LIST ──────────────────────────────────────────────────────────────
     function drawTagList(label, items) {
-      const CHIP_H = 16, GAP = 5, PAD_X = 8;
+      const GAP = 5, PAD_X = 8, PAD_Y = 5;
+      const CHIP_MAX_W = 110; // max chip width — text wraps inside beyond this
       const availW = CONTENT;
 
       ensureSpace(40);
@@ -705,32 +706,43 @@ function buildPDF(rows) {
          .text(label, MARGIN + 10, y + 5, { width: CONTENT - 20, lineBreak: false });
       doc.y = y + 18 + 6;
 
-      // Wrap chips
+      // Pre-compute each chip's width and height from actual text layout
+      const chipMeta = items.map(item => {
+        const singleW = doc.font("Helvetica-Bold").fontSize(7).widthOfString(item);
+        const cw = Math.min(singleW + PAD_X * 2, CHIP_MAX_W);
+        const innerW = cw - PAD_X * 2;
+        const th = doc.font("Helvetica-Bold").fontSize(7).heightOfString(item, { width: innerW });
+        const ch = th + PAD_Y * 2;
+        return { item, cw, ch, innerW };
+      });
+
+      // Wrap chips into rows by available width
       const lines = [[]];
       let lineW = 0;
-      items.forEach(item => {
-        const cw = doc.font("Helvetica-Bold").fontSize(7).widthOfString(item) + PAD_X * 2 + GAP;
-        if (lineW + cw > availW && lines[lines.length - 1].length > 0) {
-          lines.push([item]);
-          lineW = cw;
+      chipMeta.forEach(meta => {
+        const needed = meta.cw + GAP;
+        if (lineW + needed > availW && lines[lines.length - 1].length > 0) {
+          lines.push([meta]);
+          lineW = needed;
         } else {
-          lines[lines.length - 1].push(item);
-          lineW += cw;
+          lines[lines.length - 1].push(meta);
+          lineW += needed;
         }
       });
 
       lines.forEach(line => {
-        ensureSpace(CHIP_H + GAP);
+        const rowH = Math.max(...line.map(m => m.ch));
+        ensureSpace(rowH + GAP);
         let cx = MARGIN;
         const ly = doc.y;
-        line.forEach(item => {
-          const cw = doc.font("Helvetica-Bold").fontSize(7).widthOfString(item) + PAD_X * 2;
-          roundRect(cx, ly, cw, CHIP_H, 4, LBLUE2, "#93c5fd", 0.5);
+        line.forEach(({ item, cw, ch, innerW }) => {
+          const chipY = ly + (rowH - ch) / 2;
+          roundRect(cx, chipY, cw, ch, 4, LBLUE2, "#93c5fd", 0.5);
           doc.font("Helvetica-Bold").fontSize(7).fillColor(NAVY2)
-             .text(item, cx + PAD_X, ly + 5, { width: cw - PAD_X * 2, lineBreak: false });
+             .text(item, cx + PAD_X, chipY + PAD_Y, { width: innerW, lineBreak: true });
           cx += cw + GAP;
         });
-        doc.y = ly + CHIP_H + GAP;
+        doc.y = ly + rowH + GAP;
       });
     }
 
