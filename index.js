@@ -838,10 +838,10 @@ function buildPDF(rows) {
       }
 
       // Section loop
-      SECTIONS.forEach(sec => {
+      SECTIONS.forEach((sec, secIdx) => {
         const pairs = sec.keys
           .filter(k => d[k] != null && String(d[k]).trim() !== "")
-          .map(k => [toLabel(k), formatFieldValue(k, d[k])]);
+          .map(k => [toLabel(k), formatFieldValue(k, d[k]), k]);
         if (!pairs.length) return;
 
         // Pre-measure rows
@@ -863,11 +863,11 @@ function buildPDF(rows) {
         y += 20;
         doc.y = y;
 
-        pairs.forEach(([label, value], i) => {
-          const rawKey = sec.keys.find(k => toLabel(k) === label) || "";
+        pairs.forEach(([label, value, rawKey], i) => {
           const isStructured = STRUCTURED_KEYS.has(rawKey);
           const parsed = isStructured ? tryParseJson(value) : null;
           const structured = parsed ? flattenStructured(parsed, rawKey) : null;
+          const isValidated = Array.isArray(d.validationFilledFields) && d.validationFilledFields.includes(rawKey);
 
           if (structured) {
             drawStructuredField(label, structured, i);
@@ -897,12 +897,49 @@ function buildPDF(rows) {
                .text(value, MARGIN + COL1 + 7, y + PAD,
                      { width: COL2 - 14, lineBreak: true });
 
+            // ✓ Validated badge — top-right of value cell
+            if (isValidated) {
+              const badgeTxt = "✓ Validated";
+              const badgeW = doc.font("Helvetica-Bold").fontSize(6.5).widthOfString(badgeTxt) + 8;
+              const badgeX = MARGIN + COL1 + COL2 - badgeW - 3;
+              const badgeY = y + 3;
+              fillRect(badgeX, badgeY, badgeW, 11, "#dcfce7");
+              doc.save().strokeColor("#86efac").lineWidth(0.3).rect(badgeX, badgeY, badgeW, 11).stroke().restore();
+              doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#15803d")
+                 .text(badgeTxt, badgeX + 4, badgeY + 2, { width: badgeW - 8, lineBreak: false });
+            }
+
             y = y + ROW_H;
             doc.y = y;
           }
         });
 
         doc.y += 8;
+
+        // ── Validation Notes box for this section ──────────────────────────────
+        const sectionId = String(secIdx + 1);
+        const note = (d.validationNotes || {})[sectionId];
+        if (note && note.trim()) {
+          const NOTE_PAD = 8;
+          const noteTextH = doc.font("Helvetica").fontSize(8).heightOfString(note.trim(), { width: CONTENT - NOTE_PAD * 2 - 10 });
+          const noteBoxH = noteTextH + NOTE_PAD * 2 + 18; // 18 = header row
+          ensureSpace(noteBoxH + 6);
+          const ny = doc.y;
+
+          // Header bar
+          fillRect(MARGIN, ny, CONTENT, 16, "#e0f2fe");
+          doc.save().strokeColor("#7dd3fc").lineWidth(0.4).rect(MARGIN, ny, CONTENT, 16).stroke().restore();
+          doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#0369a1")
+             .text("🤖  VALIDATION NOTES", MARGIN + 8, ny + 4, { width: CONTENT - 16, lineBreak: false });
+
+          // Body
+          fillRect(MARGIN, ny + 16, CONTENT, noteBoxH - 16, "#f0f9ff");
+          doc.save().strokeColor("#7dd3fc").lineWidth(0.4).rect(MARGIN, ny + 16, CONTENT, noteBoxH - 16).stroke().restore();
+          doc.font("Helvetica").fontSize(8).fillColor("#0c4a6e")
+             .text(note.trim(), MARGIN + NOTE_PAD, ny + 16 + NOTE_PAD, { width: CONTENT - NOTE_PAD * 2, lineBreak: true });
+
+          doc.y = ny + noteBoxH + 6;
+        }
       });
 
       ensureSpace(20);
@@ -2143,6 +2180,10 @@ ${JSON.stringify(suggestions.map(s => ({ field: s.field, recommendation: s.recom
 
     // Merge field values into room data
     const updatedData = { ...fullData, ...fieldValues };
+
+    // Track which fields were filled by validation (for PDF badge)
+    const existingValidated = Array.isArray(fullData.validationFilledFields) ? fullData.validationFilledFields : [];
+    updatedData.validationFilledFields = [...new Set([...existingValidated, ...Object.keys(fieldValues)])];
 
     // Merge qualitative notes into existing validationNotes (don't overwrite unrelated sections)
     const existingNotes = fullData.validationNotes || {};
