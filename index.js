@@ -398,25 +398,25 @@ function buildPDF(rows) {
     doc.on("error", e  => reject(e));
 
     // ── DESIGN TOKENS ─────────────────────────────────────────────────────────
-    const NAVY     = "#0f172a";
-    const NAVY2    = "#1e3a8a";
-    const BLUE     = "#2563eb";
-    const LBLUE    = "#eff6ff";
-    const LBLUE2   = "#dbeafe";
-    const LGRAY    = "#f8fafc";
-    const LGRAY2   = "#f1f5f9";
+    const NAVY     = "#0f1e3c";   // deeper executive navy
+    const NAVY2    = "#1d4ed8";   // richer blue (used for section headers + table headers)
+    const BLUE     = "#1d4ed8";   // richer blue
+    const LBLUE    = "#eef2ff";   // warmer light blue tint
+    const LBLUE2   = "#e0e7ff";
+    const LGRAY    = "#f7f8fa";   // cleaner off-white
+    const LGRAY2   = "#f1f4f8";
     const LGRAY3   = "#e2e8f0";
-    const BORDER   = "#e2e8f0";
-    const BORDER2  = "#cbd5e1";
-    const TEXT     = "#0f172a";
-    const MUTED    = "#64748b";
-    const MUTED2   = "#94a3b8";
+    const BORDER   = "#d1d9e6";   // softer border
+    const BORDER2  = "#b8c4d4";
+    const TEXT     = "#0d1526";   // deeper near-black
+    const MUTED    = "#5a6a82";   // warmer muted
+    const MUTED2   = "#8496ae";
     const WHITE    = "#ffffff";
     const GREEN    = "#16a34a";
     const GREEN_BG = "#f0fdf4";
     const GREEN_BD = "#bbf7d0";
-    const RED      = "#dc2626";
-    const AMBER    = "#d97706";
+    const RED      = "#b91c1c";
+    const AMBER    = "#c2410c";
     const TEAL     = "#0d9488";
     const ACCENT   = "#6366f1";
 
@@ -429,8 +429,8 @@ function buildPDF(rows) {
     const PAD     = 7;
 
     const CRIT_COLORS = {
-      Critical: "#dc2626", High: "#ea580c", Medium: "#ca8a04",
-      Low: "#16a34a", Ancillary: "#0369a1"
+      Critical: "#b91c1c", High: "#c2410c", Medium: "#a16207",
+      Low: "#15803d", Ancillary: "#0369a1"
     };
     const CRIT_BG = {
       Critical: "#fef2f2", High: "#fff7ed", Medium: "#fefce8",
@@ -509,24 +509,15 @@ function buildPDF(rows) {
 
     // ── SECTION HEADER BAR ────────────────────────────────────────────────────
     function drawSectionHeader(label) {
-      ensureSpace(28);
+      ensureSpace(30);
       const y = doc.y;
       // Main bar
-      fillRect(MARGIN, y, CONTENT, 24, NAVY2);
-      // Left accent
-      fillRect(MARGIN, y, 4, 24, ACCENT);
-      // Section number circle
-      const match = label.match(/^(\d+)\./);
-      if (match) {
-        const num = match[1];
-        dot(MARGIN + 18, y + 12, 9, "rgba(255,255,255,0.12)");
-        doc.font("Helvetica-Bold").fontSize(9).fillColor("rgba(255,255,255,0.55)")
-           .text(num, MARGIN + 13, y + 7, { width: 12, align: "center", lineBreak: false });
-      }
+      fillRect(MARGIN, y, CONTENT, 22, NAVY2);
+      // Indigo left accent bar — clean, no dot/circle
+      fillRect(MARGIN, y, 5, 22, "#6366f1");
       doc.font("Helvetica-Bold").fontSize(9).fillColor(WHITE)
-         .text(label.replace(/^\d+\.\s*/, "").toUpperCase(),
-               MARGIN + 32, y + 8, { width: CONTENT - 40, lineBreak: false });
-      doc.y = y + 24;
+         .text(label.toUpperCase(), MARGIN + 14, y + 7, { width: CONTENT - 22, lineBreak: false });
+      doc.y = y + 22;
     }
 
     // ── STANDARD TWO-COLUMN ROW ───────────────────────────────────────────────
@@ -984,12 +975,15 @@ function buildPDF(rows) {
       doc.font("Helvetica-Bold").fontSize(9).fillColor(WHITE)
          .text((crit || "SUBMITTED").toUpperCase(), bx, by + 7, { width: BADGE_W, align: "center", lineBreak: false });
 
-      // Room code
-      doc.font("Helvetica-Bold").fontSize(18).fillColor(NAVY)
-         .text(currentRoomCode || "—", MARGIN + 14, y + 10, { width: CONTENT * 0.65, lineBreak: false });
-      // Room name
+      // Room code — adaptive font size to prevent overflow
+      const codeText = currentRoomCode || "—";
+      const codeFontSize = codeText.length > 30 ? 13 : codeText.length > 20 ? 16 : 20;
+      doc.font("Helvetica-Bold").fontSize(codeFontSize).fillColor(NAVY)
+         .text(codeText, MARGIN + 14, y + 10, { width: CONTENT * 0.60, lineBreak: true });
+      const codeH = doc.font("Helvetica-Bold").fontSize(codeFontSize).heightOfString(codeText, { width: CONTENT * 0.60 });
+      // Room name — positioned immediately below the (possibly wrapped) code
       doc.font("Helvetica").fontSize(10).fillColor(MUTED)
-         .text(d.roomName || r.roomName || "Unnamed Room", MARGIN + 14, y + 34, { width: CONTENT * 0.65, lineBreak: false });
+         .text(d.roomName || r.roomName || "Unnamed Room", MARGIN + 14, y + 14 + codeH, { width: CONTENT * 0.60, lineBreak: false });
       // Typology pill
       if (d.roomTypology) {
         const typW = doc.font("Helvetica-Bold").fontSize(7).widthOfString(d.roomTypology) + 16;
