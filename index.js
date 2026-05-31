@@ -918,25 +918,38 @@ function buildPDF(rows) {
 
         // ── Validation Notes box for this section ──────────────────────────────
         const sectionId = String(secIdx + 1);
-        const note = (d.validationNotes || {})[sectionId];
-        if (note && note.trim()) {
+        const rawNote = (d.validationNotes || {})[sectionId];
+        const notePoints = Array.isArray(rawNote) ? rawNote : rawNote ? [String(rawNote)] : [];
+        if (notePoints.length > 0) {
           const NOTE_PAD = 8;
-          const noteTextH = doc.font("Helvetica").fontSize(8).heightOfString(note.trim(), { width: CONTENT - NOTE_PAD * 2 - 10 });
-          const noteBoxH = noteTextH + NOTE_PAD * 2 + 18; // 18 = header row
+          const BULLET_H = 14; // height per bullet row
+          const bodyH = notePoints.length * BULLET_H + NOTE_PAD * 2;
+          const noteBoxH = 16 + bodyH; // 16 = header row
           ensureSpace(noteBoxH + 6);
           const ny = doc.y;
 
-          // Header bar
+          // Header bar — no emoji, plain text
           fillRect(MARGIN, ny, CONTENT, 16, "#e0f2fe");
           doc.save().strokeColor("#7dd3fc").lineWidth(0.4).rect(MARGIN, ny, CONTENT, 16).stroke().restore();
+          // Small square icon instead of emoji
+          fillRect(MARGIN + 8, ny + 4, 8, 8, "#0369a1");
           doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#0369a1")
-             .text("🤖  VALIDATION NOTES", MARGIN + 8, ny + 4, { width: CONTENT - 16, lineBreak: false });
+             .text("AI  VALIDATION NOTES", MARGIN + 22, ny + 4, { width: CONTENT - 30, lineBreak: false });
 
-          // Body
-          fillRect(MARGIN, ny + 16, CONTENT, noteBoxH - 16, "#f0f9ff");
-          doc.save().strokeColor("#7dd3fc").lineWidth(0.4).rect(MARGIN, ny + 16, CONTENT, noteBoxH - 16).stroke().restore();
-          doc.font("Helvetica").fontSize(8).fillColor("#0c4a6e")
-             .text(note.trim(), MARGIN + NOTE_PAD, ny + 16 + NOTE_PAD, { width: CONTENT - NOTE_PAD * 2, lineBreak: true });
+          // Body background
+          fillRect(MARGIN, ny + 16, CONTENT, bodyH, "#f0f9ff");
+          doc.save().strokeColor("#7dd3fc").lineWidth(0.4).rect(MARGIN, ny + 16, CONTENT, bodyH).stroke().restore();
+
+          // Bullet points — one per note
+          notePoints.forEach((point, pi) => {
+            const bx = MARGIN + NOTE_PAD;
+            const by = ny + 16 + NOTE_PAD + pi * BULLET_H;
+            // Bullet dot
+            doc.save().fillColor("#0369a1").circle(bx + 2, by + 4, 2).fill().restore();
+            // Point text
+            doc.font("Helvetica").fontSize(8).fillColor("#0c4a6e")
+               .text(point.trim(), bx + 10, by, { width: CONTENT - NOTE_PAD * 2 - 10, lineBreak: false, ellipsis: true });
+          });
 
           doc.y = ny + noteBoxH + 6;
         }
@@ -2164,11 +2177,11 @@ app.post("/apply-suggestions", async (req, res) => {
 Return ONLY a JSON object with two keys:
 {
   "fieldValues": { "fieldName": "value" },
-  "qualitativeNotes": { "sectionId": "combined note text for that section" }
+  "qualitativeNotes": { "sectionId": ["note point 1", "note point 2"] }
 }
 No markdown, no explanation.
 Rules for fieldValues: numeric → number as string. Yes/No → "Yes" or "No". Select → closest matching option. Skip if value cannot be confidently extracted.
-Rules for qualitativeNotes: group advisory suggestions by sectionId into one readable sentence or two per section. Skip sections with no qualitative suggestions.
+Rules for qualitativeNotes: group advisory suggestions by sectionId as an ARRAY of short individual points (one point per suggestion). Each point max 1 sentence. Skip sections with no qualitative suggestions.
 Suggestions:
 ${JSON.stringify(suggestions.map(s => ({ field: s.field, recommendation: s.recommendation, sectionId: s.sectionId, reason: s.reason })))}`
       }]
@@ -2185,11 +2198,13 @@ ${JSON.stringify(suggestions.map(s => ({ field: s.field, recommendation: s.recom
     const existingValidated = Array.isArray(fullData.validationFilledFields) ? fullData.validationFilledFields : [];
     updatedData.validationFilledFields = [...new Set([...existingValidated, ...Object.keys(fieldValues)])];
 
-    // Merge qualitative notes into existing validationNotes (don't overwrite unrelated sections)
+    // Merge qualitative notes — append new points to existing array per section
     const existingNotes = fullData.validationNotes || {};
     const mergedNotes = { ...existingNotes };
-    for (const [sectionId, note] of Object.entries(qualitativeNotes)) {
-      mergedNotes[sectionId] = note;
+    for (const [sectionId, points] of Object.entries(qualitativeNotes)) {
+      const arr = Array.isArray(points) ? points : [String(points)];
+      const existing = Array.isArray(mergedNotes[sectionId]) ? mergedNotes[sectionId] : mergedNotes[sectionId] ? [mergedNotes[sectionId]] : [];
+      mergedNotes[sectionId] = [...existing, ...arr];
     }
     updatedData.validationNotes = mergedNotes;
 
