@@ -388,10 +388,10 @@ function flattenStructured(parsed, fieldKey) {
   return null;
 }
 
-// ─── PDF BUILDER — PREMIUM ENTERPRISE EDITION ────────────────────────────────
+// ─── PDF BUILDER (FIXED: COL1/COL2/PAD defined at top) ─────────────────
 function buildPDF(rows) {
   return new Promise((resolve, reject) => {
-    const doc    = new PDFDocument({ size: "A4", margin: 40, info: { Title: "Room Data Sheet", Author: "Medical College RDS System" } });
+    const doc    = new PDFDocument({ size: "A4", margin: 45, info: { Title: "Room Data Sheet", Author: "Medical College RDS System" } });
     const chunks = [];
     doc.on("data",  c  => chunks.push(c));
     doc.on("end",   () => resolve(Buffer.concat(chunks)));
