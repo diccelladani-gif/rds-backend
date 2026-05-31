@@ -388,579 +388,771 @@ function flattenStructured(parsed, fieldKey) {
   return null;
 }
 
-// ─── PDF BUILDER (FIXED: COL1/COL2/PAD defined at top) ─────────────────
+// ─── PDF BUILDER — WORLD CLASS ENTERPRISE EDITION ────────────────────────────
 function buildPDF(rows) {
   return new Promise((resolve, reject) => {
-    const doc    = new PDFDocument({ size: "A4", margin: 45, info: { Title: "Room Data Sheet", Author: "Medical College RDS System" } });
+    const doc = new PDFDocument({ size: "A4", margin: 40, info: { Title: "Room Data Sheet", Author: "Medical Infra Facility Planning" } });
     const chunks = [];
     doc.on("data",  c  => chunks.push(c));
     doc.on("end",   () => resolve(Buffer.concat(chunks)));
     doc.on("error", e  => reject(e));
 
-    const NAVY   = "#1e3a8a";
-    const BLUE   = "#2563eb";
-    const LBLUE  = "#dbeafe";
-    const LGRAY  = "#f1f5f9";
-    const BORDER = "#cbd5e1";
-    const TEXT   = "#111827";
-    const MUTED  = "#64748b";
-    const WHITE  = "#ffffff";
+    // ── DESIGN TOKENS ─────────────────────────────────────────────────────────
+    const NAVY     = "#0f172a";
+    const NAVY2    = "#1e3a8a";
+    const BLUE     = "#2563eb";
+    const LBLUE    = "#eff6ff";
+    const LBLUE2   = "#dbeafe";
+    const LGRAY    = "#f8fafc";
+    const LGRAY2   = "#f1f5f9";
+    const LGRAY3   = "#e2e8f0";
+    const BORDER   = "#e2e8f0";
+    const BORDER2  = "#cbd5e1";
+    const TEXT     = "#0f172a";
+    const MUTED    = "#64748b";
+    const MUTED2   = "#94a3b8";
+    const WHITE    = "#ffffff";
+    const GREEN    = "#16a34a";
+    const GREEN_BG = "#f0fdf4";
+    const GREEN_BD = "#bbf7d0";
+    const RED      = "#dc2626";
+    const AMBER    = "#d97706";
+    const TEAL     = "#0d9488";
+    const ACCENT   = "#6366f1";
 
     const PAGE_W  = doc.page.width;
     const PAGE_H  = doc.page.height;
-    const MARGIN  = 45;
+    const MARGIN  = 42;
     const CONTENT = PAGE_W - MARGIN * 2;
-
-    // --- FIX: define COL1, COL2, PAD at top ---
-    const COL1 = CONTENT * 0.38;
-    const COL2 = CONTENT * 0.62;
-    const PAD  = 6;
-    // -----------------------------------------
+    const COL1    = CONTENT * 0.36;
+    const COL2    = CONTENT * 0.64;
+    const PAD     = 7;
 
     const CRIT_COLORS = {
       Critical: "#dc2626", High: "#ea580c", Medium: "#ca8a04",
       Low: "#16a34a", Ancillary: "#0369a1"
     };
+    const CRIT_BG = {
+      Critical: "#fef2f2", High: "#fff7ed", Medium: "#fefce8",
+      Low: "#f0fdf4", Ancillary: "#f0f9ff"
+    };
 
-    function hLine(y, color = BORDER, lw = 0.5) {
+    // ── PRIMITIVES ────────────────────────────────────────────────────────────
+    function hLine(y, color = BORDER, lw = 0.4) {
       doc.save().strokeColor(color).lineWidth(lw)
          .moveTo(MARGIN, y).lineTo(MARGIN + CONTENT, y).stroke().restore();
     }
-
     function fillRect(x, y, w, h, color) {
       doc.save().fillColor(color).rect(x, y, w, h).fill().restore();
     }
-
-    function borderRect(x, y, w, h, fill, stroke = BORDER, lw = 0.5) {
+    function strokeRect(x, y, w, h, color = BORDER, lw = 0.4) {
+      doc.save().strokeColor(color).lineWidth(lw).rect(x, y, w, h).stroke().restore();
+    }
+    function fillAndStroke(x, y, w, h, fill, stroke = BORDER, lw = 0.4) {
       doc.save().fillColor(fill).strokeColor(stroke).lineWidth(lw)
          .rect(x, y, w, h).fillAndStroke().restore();
     }
-
+    function roundRect(x, y, w, h, r, fill, stroke = null, lw = 0.5) {
+      doc.save();
+      doc.fillColor(fill);
+      if (stroke) doc.strokeColor(stroke).lineWidth(lw);
+      doc.roundedRect(x, y, w, h, r);
+      stroke ? doc.fillAndStroke() : doc.fill();
+      doc.restore();
+    }
+    function dot(x, y, r, color) {
+      doc.save().fillColor(color).circle(x, y, r).fill().restore();
+    }
     function ensureSpace(needed) {
-      if (doc.y + needed > PAGE_H - MARGIN - 30) {
+      if (doc.y + needed > PAGE_H - MARGIN - 20) {
         doc.addPage();
-        drawPageHeader();
+        drawRunningHeader();
       }
     }
 
-    function drawPageHeader() {
-      fillRect(0, 0, PAGE_W, 36, NAVY);
-      doc.font("Helvetica-Bold").fontSize(13).fillColor(WHITE)
-         .text("ROOM DATA SHEET", MARGIN, 11, { width: CONTENT / 2 });
-      doc.font("Helvetica").fontSize(9).fillColor("rgba(255,255,255,0.75)")
-         .text("Medical College — Facility Planning", MARGIN + CONTENT / 2, 14,
-               { width: CONTENT / 2, align: "right" });
-      doc.y = 50;
+    // ── RUNNING HEADER (every page after first) ───────────────────────────────
+    let currentRoomCode = "";
+    function drawRunningHeader() {
+      fillRect(0, 0, PAGE_W, 32, NAVY);
+      // Left accent stripe
+      fillRect(0, 0, 4, 32, ACCENT);
+      doc.font("Helvetica-Bold").fontSize(11).fillColor(WHITE)
+         .text("ROOM DATA SHEET", MARGIN + 6, 10, { width: CONTENT * 0.5 });
+      doc.font("Helvetica").fontSize(8).fillColor(MUTED2)
+         .text("Medical Infra  ·  Facility Planning", MARGIN + 6, 21, { width: CONTENT * 0.5 });
+      if (currentRoomCode) {
+        doc.font("Helvetica-Bold").fontSize(8).fillColor(LBLUE2)
+           .text(currentRoomCode, MARGIN, 12, { width: CONTENT, align: "right" });
+      }
+      doc.y = 46;
     }
 
-    function drawStructuredField(label, structured, rowIdx) {
-      const INNER_MARGIN = MARGIN + COL1;
-      const INNER_W = COL2;
-      const CELL_PAD = 5;
-      const HDR_H = 16;
-      const DATA_ROW_H = 14;
-      const HEADER_BG = "#1e3a8a";
-      const ALT_ROW = "#f0f4ff";
-
-      if (structured.type === "keyValue" && structured.rows.length > 0) {
-        const subRows = structured.rows;
-        const totalH = HDR_H + subRows.length * DATA_ROW_H + CELL_PAD * 2;
-        const LABEL_ROW_H = Math.max(20 + PAD * 2, 28);
-
-        ensureSpace(LABEL_ROW_H + totalH + 4);
-        let y = doc.y;
-
-        const bgLabel = rowIdx % 2 === 0 ? LGRAY : "#fafbfc";
-        fillRect(MARGIN, y, COL1, LABEL_ROW_H + totalH, bgLabel);
-        doc.save().strokeColor(BORDER).lineWidth(0.3)
-           .rect(MARGIN, y, COL1, LABEL_ROW_H + totalH).stroke().restore();
-        const lh = doc.font("Helvetica-Bold").fontSize(8.5).heightOfString(label, { width: COL1 - 14 });
-        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
-           .text(label, MARGIN + 7, y + (LABEL_ROW_H + totalH - lh) / 2,
-                 { width: COL1 - 14, lineBreak: false, ellipsis: true });
-
-        fillRect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H + totalH, rowIdx % 2 === 0 ? WHITE : "#fdfdfd");
-        doc.save().strokeColor(BORDER).lineWidth(0.3)
-           .rect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H + totalH).stroke().restore();
-        doc.save().strokeColor(BORDER).lineWidth(0.3)
-           .moveTo(MARGIN + COL1, y).lineTo(MARGIN + COL1, y + LABEL_ROW_H + totalH).stroke().restore();
-
-        const TX = INNER_MARGIN + CELL_PAD;
-        const TW = INNER_W - CELL_PAD * 2;
-        const COL_L = TW * 0.42;
-        const COL_V = TW * 0.58;
-        let ty = y + CELL_PAD;
-
-        fillRect(TX, ty, TW, HDR_H, HEADER_BG);
-        doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(TX, ty, TW, HDR_H).stroke().restore();
-        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
-           .text("PROPERTY", TX + 4, ty + 4, { width: COL_L - 4, lineBreak: false });
-        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
-           .text("VALUE", TX + COL_L + 4, ty + 4, { width: COL_V - 4, lineBreak: false });
-        ty += HDR_H;
-
-        subRows.forEach((row, si) => {
-          const bg = si % 2 === 0 ? WHITE : ALT_ROW;
-          fillRect(TX, ty, COL_L, DATA_ROW_H, bg);
-          fillRect(TX + COL_L, ty, COL_V, DATA_ROW_H, bg);
-          doc.save().strokeColor(BORDER).lineWidth(0.2).rect(TX, ty, TW, DATA_ROW_H).stroke().restore();
-          doc.save().strokeColor(BORDER).lineWidth(0.2)
-             .moveTo(TX + COL_L, ty).lineTo(TX + COL_L, ty + DATA_ROW_H).stroke().restore();
-          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(MUTED)
-             .text(row.label, TX + 3, ty + 3, { width: COL_L - 6, lineBreak: false, ellipsis: true });
-          doc.font("Helvetica").fontSize(7.5).fillColor(TEXT)
-             .text(row.value, TX + COL_L + 3, ty + 3, { width: COL_V - 6, lineBreak: false, ellipsis: true });
-          ty += DATA_ROW_H;
-        });
-
-        doc.y = y + LABEL_ROW_H + totalH;
-        return;
+    // ── YES/NO CHIP ───────────────────────────────────────────────────────────
+    function drawYesNoChip(x, y, value) {
+      const isYes = String(value).toLowerCase() === "yes" || value === true;
+      const bg    = isYes ? GREEN_BG  : "#f8fafc";
+      const bd    = isYes ? GREEN_BD  : LGRAY3;
+      const color = isYes ? GREEN     : MUTED;
+      const label = isYes ? "YES"     : "NO";
+      const W = 34, H = 14;
+      roundRect(x, y, W, H, 3, bg, bd, 0.5);
+      if (isYes) dot(x + 8, y + 7, 2.5, GREEN);
+      else {
+        doc.save().strokeColor(MUTED2).lineWidth(0.8)
+           .moveTo(x + 6, y + 5).lineTo(x + 10, y + 9)
+           .moveTo(x + 10, y + 5).lineTo(x + 6, y + 9).stroke().restore();
       }
+      doc.font("Helvetica-Bold").fontSize(6.5).fillColor(color)
+         .text(label, x + 13, y + 4, { width: 20, lineBreak: false });
+      return W;
+    }
 
-      if (structured.type === "tagList" && structured.items.length > 0) {
-        const CHIP_H = 14, CHIP_GAP = 4, CHIP_PAD_X = 6;
-        const availW = INNER_W - CELL_PAD * 2;
-        const lines = [];
-        let currentLine = [], currentW = 0;
-        structured.items.forEach(item => {
-          const cw = doc.font("Helvetica").fontSize(7.5).widthOfString(item) + CHIP_PAD_X * 2 + CHIP_GAP;
-          if (currentW + cw > availW && currentLine.length > 0) {
-            lines.push(currentLine);
-            currentLine = [item];
-            currentW = cw;
-          } else {
-            currentLine.push(item);
-            currentW += cw;
-          }
-        });
-        if (currentLine.length > 0) lines.push(currentLine);
-
-        const totalH = lines.length * (CHIP_H + CHIP_GAP) + CELL_PAD * 2;
-        const LABEL_ROW_H = Math.max(totalH, 28);
-
-        ensureSpace(LABEL_ROW_H + 4);
-        let y = doc.y;
-
-        const bgLabel = rowIdx % 2 === 0 ? LGRAY : "#fafbfc";
-        fillRect(MARGIN, y, COL1, LABEL_ROW_H, bgLabel);
-        doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, COL1, LABEL_ROW_H).stroke().restore();
-        const lh = doc.font("Helvetica-Bold").fontSize(8.5).heightOfString(label, { width: COL1 - 14 });
-        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
-           .text(label, MARGIN + 7, y + (LABEL_ROW_H - lh) / 2, { width: COL1 - 14, lineBreak: false, ellipsis: true });
-
-        fillRect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H, rowIdx % 2 === 0 ? WHITE : "#fdfdfd");
-        doc.save().strokeColor(BORDER).lineWidth(0.3).rect(INNER_MARGIN, y, INNER_W, LABEL_ROW_H).stroke().restore();
-        doc.save().strokeColor(BORDER).lineWidth(0.3)
-           .moveTo(MARGIN + COL1, y).lineTo(MARGIN + COL1, y + LABEL_ROW_H).stroke().restore();
-
-        let cy = y + CELL_PAD;
-        lines.forEach(line => {
-          let cx = INNER_MARGIN + CELL_PAD;
-          line.forEach(item => {
-            const cw = doc.font("Helvetica").fontSize(7.5).widthOfString(item) + CHIP_PAD_X * 2;
-            fillRect(cx, cy, cw, CHIP_H, "#dbeafe");
-            doc.save().strokeColor("#93c5fd").lineWidth(0.3).rect(cx, cy, cw, CHIP_H).stroke().restore();
-            doc.font("Helvetica").fontSize(7.5).fillColor(NAVY)
-               .text(item, cx + CHIP_PAD_X, cy + 3, { width: cw - CHIP_PAD_X * 2, lineBreak: false });
-            cx += cw + CHIP_GAP;
-          });
-          cy += CHIP_H + CHIP_GAP;
-        });
-
-        doc.y = y + LABEL_ROW_H;
-        return;
+    // ── SECTION HEADER BAR ────────────────────────────────────────────────────
+    function drawSectionHeader(label) {
+      ensureSpace(28);
+      const y = doc.y;
+      // Main bar
+      fillRect(MARGIN, y, CONTENT, 24, NAVY2);
+      // Left accent
+      fillRect(MARGIN, y, 4, 24, ACCENT);
+      // Section number circle
+      const match = label.match(/^(\d+)\./);
+      if (match) {
+        const num = match[1];
+        dot(MARGIN + 18, y + 12, 9, "rgba(255,255,255,0.12)");
+        doc.font("Helvetica-Bold").fontSize(9).fillColor("rgba(255,255,255,0.55)")
+           .text(num, MARGIN + 13, y + 7, { width: 12, align: "center", lineBreak: false });
       }
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(WHITE)
+         .text(label.replace(/^\d+\.\s*/, "").toUpperCase(),
+               MARGIN + 32, y + 8, { width: CONTENT - 40, lineBreak: false });
+      doc.y = y + 24;
+    }
 
-      if (structured.type === "medGasTable") {
-        const { gases, locationKeys, data: gasData } = structured;
-        const COL_GAS = 110;
-        const locCols = locationKeys.length;
-        const COL_LOC = (CONTENT - COL_GAS) / locCols;
-        const HDR_R_H = 18;
-        const GAS_ROW_H = 14;
-        const totalH = HDR_R_H * 2 + gases.length * GAS_ROW_H + 2;
+    // ── STANDARD TWO-COLUMN ROW ───────────────────────────────────────────────
+    function drawRow(label, value, rowIdx, isValidated) {
+      const isYN = /^(yes|no)$/i.test(String(value).trim());
+      const ROW_H_MIN = 22;
+      const labelH = doc.font("Helvetica-Bold").fontSize(8).heightOfString(label, { width: COL1 - 16 });
+      const valueH = isYN ? 14 : doc.font("Helvetica").fontSize(8.5).heightOfString(String(value), { width: COL2 - 16 });
+      const ROW_H = Math.max(ROW_H_MIN, Math.max(labelH, valueH) + PAD * 2);
 
-        ensureSpace(20 + totalH + 8);
-        let y = doc.y;
+      ensureSpace(ROW_H + 1);
+      const y = doc.y;
+      const bgL = rowIdx % 2 === 0 ? LGRAY2 : WHITE;
+      const bgR = rowIdx % 2 === 0 ? WHITE   : LGRAY;
 
-        fillRect(MARGIN, y, CONTENT, 20, "#e0e7ff");
-        doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, 20).stroke().restore();
-        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY)
-           .text(label, MARGIN + 7, y + 6, { width: CONTENT - 14, lineBreak: false });
-        y += 20;
-
-        fillRect(MARGIN, y, COL_GAS, HDR_R_H, HEADER_BG);
-        doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(MARGIN, y, COL_GAS, HDR_R_H).stroke().restore();
-        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
-           .text("GAS / SERVICE", MARGIN + 4, y + 5, { width: COL_GAS - 8, lineBreak: false });
-
-        locationKeys.forEach((loc, li) => {
-          const lx = MARGIN + COL_GAS + li * COL_LOC;
-          fillRect(lx, y, COL_LOC, HDR_R_H, HEADER_BG);
-          doc.save().strokeColor("#ffffff").lineWidth(0.2).rect(lx, y, COL_LOC, HDR_R_H).stroke().restore();
-          doc.font("Helvetica-Bold").fontSize(6.5).fillColor(WHITE)
-             .text(loc.toUpperCase(), lx + 2, y + 5, { width: COL_LOC - 4, align: "center", lineBreak: false });
-        });
-        y += HDR_R_H;
-
-        gases.forEach((gas, gi) => {
-          const bg = gi % 2 === 0 ? WHITE : ALT_ROW;
-          fillRect(MARGIN, y, COL_GAS, GAS_ROW_H, bg);
-          doc.save().strokeColor(BORDER).lineWidth(0.2).rect(MARGIN, y, COL_GAS, GAS_ROW_H).stroke().restore();
-          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(TEXT)
-             .text(gas.toUpperCase(), MARGIN + 4, y + 3, { width: COL_GAS - 8, lineBreak: false, ellipsis: true });
-
-          const gasData2 = typeof gasData[gas] === "object" ? gasData[gas] : {};
-          locationKeys.forEach((loc, li) => {
-            const lx = MARGIN + COL_GAS + li * COL_LOC;
-            fillRect(lx, y, COL_LOC, GAS_ROW_H, bg);
-            doc.save().strokeColor(BORDER).lineWidth(0.2).rect(lx, y, COL_LOC, GAS_ROW_H).stroke().restore();
-            const qty = gasData2[loc] !== undefined ? String(gasData2[loc]) : "—";
-            doc.font("Helvetica").fontSize(7.5).fillColor(qty === "0" || qty === "—" ? MUTED : TEXT)
-               .text(qty, lx + 2, y + 3, { width: COL_LOC - 4, align: "center", lineBreak: false });
-          });
-          y += GAS_ROW_H;
-        });
-
-        doc.y = y + 4;
-        return;
-      }
-
-      if (structured.type === "constructionTable") {
-        const { elements, cols, data: conData } = structured;
-        const COL_ELEM = 90;
-        const COL_C = (CONTENT - COL_ELEM) / cols.length;
-        const HDR_R_H = 18;
-        const EL_ROW_H = 14;
-        const totalH = HDR_R_H + elements.length * EL_ROW_H + 2;
-
-        ensureSpace(20 + totalH + 8);
-        let y = doc.y;
-
-        fillRect(MARGIN, y, CONTENT, 20, "#e0e7ff");
-        doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, 20).stroke().restore();
-        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY)
-           .text(label, MARGIN + 7, y + 6, { width: CONTENT - 14, lineBreak: false });
-        y += 20;
-
-        fillRect(MARGIN, y, COL_ELEM, HDR_R_H, HEADER_BG);
-        doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(MARGIN, y, COL_ELEM, HDR_R_H).stroke().restore();
-        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
-           .text("ELEMENT", MARGIN + 4, y + 5, { width: COL_ELEM - 8, lineBreak: false });
-        cols.forEach((col, ci) => {
-          const cx = MARGIN + COL_ELEM + ci * COL_C;
-          fillRect(cx, y, COL_C, HDR_R_H, HEADER_BG);
-          doc.save().strokeColor("#ffffff").lineWidth(0.2).rect(cx, y, COL_C, HDR_R_H).stroke().restore();
-          doc.font("Helvetica-Bold").fontSize(6).fillColor(WHITE)
-             .text(col.toUpperCase(), cx + 2, y + 5, { width: COL_C - 4, align: "center", lineBreak: false });
-        });
-        y += HDR_R_H;
-
-        elements.forEach((elem, ei) => {
-          const bg = ei % 2 === 0 ? WHITE : ALT_ROW;
-          fillRect(MARGIN, y, COL_ELEM, EL_ROW_H, bg);
-          doc.save().strokeColor(BORDER).lineWidth(0.2).rect(MARGIN, y, COL_ELEM, EL_ROW_H).stroke().restore();
-          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(TEXT)
-             .text(keyToLabel(elem), MARGIN + 4, y + 3, { width: COL_ELEM - 8, lineBreak: false, ellipsis: true });
-
-          const elemData = typeof conData[elem] === "object" ? conData[elem] : {};
-          cols.forEach((col, ci) => {
-            const cx = MARGIN + COL_ELEM + ci * COL_C;
-            fillRect(cx, y, COL_C, EL_ROW_H, bg);
-            doc.save().strokeColor(BORDER).lineWidth(0.2).rect(cx, y, COL_C, EL_ROW_H).stroke().restore();
-            const val = elemData[col] || "—";
-            doc.font("Helvetica").fontSize(7).fillColor(val === "—" ? MUTED : TEXT)
-               .text(String(val), cx + 2, y + 3, { width: COL_C - 4, align: "center", lineBreak: false, ellipsis: true });
-          });
-          y += EL_ROW_H;
-        });
-
-        doc.y = y + 4;
-        return;
-      }
-
-      if (structured.type === "elvTable") {
-        const { systems, quantities } = structured;
-        const locKeys = ["WALL (W)", "BEDHEAD PANEL (BHP)", "MEDICAL PENDANT (MP)", "CEILING (C)"];
-        const LOC_LABELS = ["WALL", "BHP", "MP", "CEIL"];
-        const COL_SYS = 130;
-        const COL_LC = (CONTENT - COL_SYS) / locKeys.length;
-        const HDR_R_H = 18;
-        const SYS_ROW_H = 14;
-        const totalH = HDR_R_H + systems.length * SYS_ROW_H + 2;
-
-        ensureSpace(20 + totalH + 8);
-        let y = doc.y;
-
-        fillRect(MARGIN, y, CONTENT, 20, "#e0e7ff");
-        doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, 20).stroke().restore();
-        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY)
-           .text(label, MARGIN + 7, y + 6, { width: CONTENT - 14, lineBreak: false });
-        y += 20;
-
-        fillRect(MARGIN, y, COL_SYS, HDR_R_H, HEADER_BG);
-        doc.save().strokeColor(HEADER_BG).lineWidth(0.3).rect(MARGIN, y, COL_SYS, HDR_R_H).stroke().restore();
-        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
-           .text("SYSTEM", MARGIN + 4, y + 5, { width: COL_SYS - 8, lineBreak: false });
-        LOC_LABELS.forEach((loc, li) => {
-          const lx = MARGIN + COL_SYS + li * COL_LC;
-          fillRect(lx, y, COL_LC, HDR_R_H, HEADER_BG);
-          doc.save().strokeColor("#ffffff").lineWidth(0.2).rect(lx, y, COL_LC, HDR_R_H).stroke().restore();
-          doc.font("Helvetica-Bold").fontSize(6.5).fillColor(WHITE)
-             .text(loc, lx + 2, y + 5, { width: COL_LC - 4, align: "center", lineBreak: false });
-        });
-        y += HDR_R_H;
-
-        systems.forEach((sys, si) => {
-          const bg = si % 2 === 0 ? WHITE : ALT_ROW;
-          fillRect(MARGIN, y, COL_SYS, SYS_ROW_H, bg);
-          doc.save().strokeColor(BORDER).lineWidth(0.2).rect(MARGIN, y, COL_SYS, SYS_ROW_H).stroke().restore();
-          doc.font("Helvetica").fontSize(7.5).fillColor(TEXT)
-             .text(sys, MARGIN + 4, y + 3, { width: COL_SYS - 8, lineBreak: false, ellipsis: true });
-
-          const sysQtys = quantities[sys] || {};
-          locKeys.forEach((lk, li) => {
-            const lx = MARGIN + COL_SYS + li * COL_LC;
-            fillRect(lx, y, COL_LC, SYS_ROW_H, bg);
-            doc.save().strokeColor(BORDER).lineWidth(0.2).rect(lx, y, COL_LC, SYS_ROW_H).stroke().restore();
-            const qty = sysQtys[lk] !== undefined ? String(sysQtys[lk]) : "—";
-            doc.font("Helvetica").fontSize(7.5).fillColor(qty === "0" || qty === "—" ? MUTED : TEXT)
-               .text(qty, lx + 2, y + 3, { width: COL_LC - 4, align: "center", lineBreak: false });
-          });
-          y += SYS_ROW_H;
-        });
-
-        doc.y = y + 4;
-        return;
-      }
-
-      // Fallback plain text rendering
-      // (this part is rarely used because structured types are handled above)
-      // But we implement it for completeness.
-      const ROW_H = 24;
-      ensureSpace(ROW_H + 2);
-      let y = doc.y;
-      const bgLabel = rowIdx % 2 === 0 ? LGRAY : "#fafbfc";
-      fillRect(MARGIN, y, COL1, ROW_H, bgLabel);
-      fillRect(MARGIN + COL1, y, COL2, ROW_H, rowIdx % 2 === 0 ? WHITE : "#fdfdfd");
-      doc.save().strokeColor(BORDER).lineWidth(0.3).rect(MARGIN, y, CONTENT, ROW_H).stroke().restore();
+      fillRect(MARGIN,        y, COL1, ROW_H, bgL);
+      fillRect(MARGIN + COL1, y, COL2, ROW_H, bgR);
+      strokeRect(MARGIN, y, CONTENT, ROW_H, BORDER, 0.3);
+      // Column divider
       doc.save().strokeColor(BORDER).lineWidth(0.3)
          .moveTo(MARGIN + COL1, y).lineTo(MARGIN + COL1, y + ROW_H).stroke().restore();
-      doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
-         .text(label, MARGIN + 7, y + PAD, { width: COL1 - 14, lineBreak: false, ellipsis: true });
-      doc.font("Helvetica").fontSize(9).fillColor(TEXT)
-         .text(String(structured || ""), MARGIN + COL1 + 7, y + PAD, { width: COL2 - 14, lineBreak: true });
+      // Left label accent dot
+      dot(MARGIN + 5, y + ROW_H / 2, 1.5, MUTED2);
+
+      const lh = doc.font("Helvetica-Bold").fontSize(8).heightOfString(label, { width: COL1 - 18 });
+      doc.font("Helvetica-Bold").fontSize(8).fillColor(MUTED)
+         .text(label, MARGIN + 12, y + (ROW_H - lh) / 2, { width: COL1 - 18, lineBreak: false, ellipsis: true });
+
+      if (isYN) {
+        drawYesNoChip(MARGIN + COL1 + 10, y + (ROW_H - 14) / 2, value);
+      } else {
+        doc.font("Helvetica").fontSize(8.5).fillColor(TEXT)
+           .text(String(value), MARGIN + COL1 + 10, y + PAD, { width: COL2 - 20, lineBreak: true });
+      }
+
+      // Validated badge
+      if (isValidated) {
+        const bw = 52, bh = 11;
+        const bx = MARGIN + COL1 + COL2 - bw - 4;
+        const by = y + (ROW_H - bh) / 2;
+        roundRect(bx, by, bw, bh, 3, GREEN_BG, GREEN_BD, 0.4);
+        dot(bx + 7, by + 5.5, 2, GREEN);
+        doc.font("Helvetica-Bold").fontSize(6).fillColor(GREEN)
+           .text("VALIDATED", bx + 12, by + 3, { width: 38, lineBreak: false });
+      }
+
       doc.y = y + ROW_H;
     }
 
-    // Main rendering loop over each room
-    rows.forEach((r, rIdx) => {
-      if (rIdx > 0) doc.addPage();
-      const d      = r.data || {};
-      const crit   = d.criticalityLevel || "";
-      const critC  = CRIT_COLORS[crit] || BLUE;
+    // ── YES/NO GRID (groups of boolean fields into a compact matrix) ──────────
+    function drawYesNoGrid(pairs) {
+      // pairs = [{label, value}]  all values are yes/no
+      const COLS    = 3;
+      const CELL_W  = CONTENT / COLS;
+      const CELL_H  = 28;
+      const rows    = Math.ceil(pairs.length / COLS);
+      const totalH  = rows * CELL_H;
 
-      drawPageHeader();
+      ensureSpace(totalH + 2);
+      const startY = doc.y;
 
-      let y = doc.y;
+      pairs.forEach(({ label, value }, i) => {
+        const col = i % COLS;
+        const row = Math.floor(i / COLS);
+        const cx  = MARGIN + col * CELL_W;
+        const cy  = startY + row * CELL_H;
+        const bg  = (col + row) % 2 === 0 ? WHITE : LGRAY;
 
-      const CARD_H = 82;
-      borderRect(MARGIN, y, CONTENT, CARD_H, LBLUE, BLUE, 1);
+        fillRect(cx, cy, CELL_W, CELL_H, bg);
+        strokeRect(cx, cy, CELL_W, CELL_H, BORDER, 0.3);
 
-      doc.font("Helvetica-Bold").fontSize(22).fillColor(NAVY)
-         .text(r.roomCode || "—", MARGIN + 14, y + 10, { width: CONTENT * 0.55, lineBreak: false });
-      doc.font("Helvetica").fontSize(11).fillColor(MUTED)
-         .text(d.roomName || r.roomName || "Unnamed Room", MARGIN + 14, y + 38, { width: CONTENT * 0.55 });
+        const isYes = /^yes$/i.test(String(value).trim()) || value === true;
+        const dotColor = isYes ? GREEN : MUTED2;
+        dot(cx + 10, cy + CELL_H / 2, 3.5, dotColor);
 
-      const BADGE_W = 110, BADGE_H = 28;
-      const bx = MARGIN + CONTENT - BADGE_W - 14;
-      const by = y + 10;
-      fillRect(bx, by, BADGE_W, BADGE_H, critC);
-      doc.font("Helvetica-Bold").fontSize(10).fillColor(WHITE)
-         .text(crit.toUpperCase() || "SUBMITTED", bx, by + 8, { width: BADGE_W, align: "center" });
-      doc.font("Helvetica").fontSize(9).fillColor(MUTED)
-         .text(d.roomTypology || "", bx, by + 42, { width: BADGE_W, align: "center" });
-
-      y += CARD_H + 10;
-
-      const META = [
-        ["Department",  d.department  || r.department  || "—"],
-        ["Project",     d.project     || r.project     || "—"],
-        ["Location",    d.location    || "—"],
-        ["Net Area",    d.netArea     ? `${d.netArea} m²` : "—"],
-        ["Patient Cap.",d.patientCapacity || "—"],
-        ["Created",     r.createdAt   ? new Date(r.createdAt).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" }) : "—"],
-      ];
-
-      const COLS   = 3;
-      const CELL_W = CONTENT / COLS;
-      const CELL_H = 36;
-      META.forEach(([label, value], i) => {
-        const col  = i % COLS;
-        const row  = Math.floor(i / COLS);
-        const cx   = MARGIN + col * CELL_W;
-        const cy   = y + row * CELL_H;
-        fillRect(cx, cy, CELL_W, CELL_H, i % 2 === 0 ? LGRAY : WHITE);
-        doc.save().strokeColor(BORDER).lineWidth(0.4)
-           .rect(cx, cy, CELL_W, CELL_H).stroke().restore();
-        doc.font("Helvetica-Bold").fontSize(7.5).fillColor(MUTED)
-           .text(label.toUpperCase(), cx + 8, cy + 6, { width: CELL_W - 16, lineBreak: false });
-        doc.font("Helvetica").fontSize(10).fillColor(TEXT)
-           .text(String(value), cx + 8, cy + 18, { width: CELL_W - 16, lineBreak: false, ellipsis: true });
+        doc.font("Helvetica-Bold").fontSize(7.5).fillColor(isYes ? TEXT : MUTED)
+           .text(label, cx + 20, cy + 6, { width: CELL_W - 56, lineBreak: false, ellipsis: true });
+        doc.font("Helvetica").fontSize(7).fillColor(isYes ? GREEN : MUTED2)
+           .text(isYes ? "YES" : "NO", cx + 20, cy + 16, { width: CELL_W - 28, lineBreak: false });
       });
 
-      y += Math.ceil(META.length / COLS) * CELL_H + 14;
-      doc.y = y;
+      doc.y = startY + totalH + 2;
+    }
 
-      const imagePath = d.imagePath;
-      if (imagePath && fs.existsSync(imagePath)) {
-        ensureSpace(140);
-        y = doc.y;
-        try {
-          const imgBuffer = fs.readFileSync(imagePath);
-          doc.font("Helvetica-Bold").fontSize(9).fillColor(NAVY)
-             .text("📐 Extracted Room Layout / Floor Plan", MARGIN, y, { width: CONTENT });
-          y += 16;
-          const img = doc.openImage(imgBuffer);
-          const maxWidth = 300;
-          const scale = maxWidth / img.width;
-          const imgHeight = img.height * scale;
-          doc.image(imgBuffer, MARGIN, y, { width: maxWidth, height: imgHeight });
-          y += imgHeight + 12;
-          doc.y = y;
-        } catch (e) {
-          console.warn("Could not embed room image:", e.message);
-          doc.font("Helvetica").fontSize(9).fillColor(MUTED)
-             .text("(Image data could not be rendered)", MARGIN, y + 16);
-          y += 30;
-          doc.y = y;
+    // ── QUANTITY GRID (numeric fields in compact cards) ────────────────────────
+    function drawQuantityGrid(pairs) {
+      const COLS   = 4;
+      const CELL_W = CONTENT / COLS;
+      const CELL_H = 38;
+      const rows   = Math.ceil(pairs.length / COLS);
+      ensureSpace(rows * CELL_H + 2);
+      const startY = doc.y;
+
+      pairs.forEach(({ label, value }, i) => {
+        const col = i % COLS;
+        const row = Math.floor(i / COLS);
+        const cx  = MARGIN + col * CELL_W;
+        const cy  = startY + row * CELL_H;
+        const qty = parseInt(String(value)) || 0;
+        const bg  = qty > 0 ? LBLUE : LGRAY;
+
+        fillAndStroke(cx, cy, CELL_W, CELL_H, bg, BORDER, 0.3);
+        // Big quantity number
+        doc.font("Helvetica-Bold").fontSize(16).fillColor(qty > 0 ? NAVY2 : MUTED2)
+           .text(String(value), cx, cy + 4, { width: CELL_W, align: "center", lineBreak: false });
+        doc.font("Helvetica").fontSize(6.5).fillColor(MUTED)
+           .text(label, cx + 4, cy + 25, { width: CELL_W - 8, align: "center", lineBreak: false, ellipsis: true });
+      });
+
+      doc.y = startY + rows * CELL_H + 2;
+    }
+
+    // ── SUBSECTION DIVIDER ────────────────────────────────────────────────────
+    function drawSubHeader(label) {
+      ensureSpace(18);
+      const y = doc.y;
+      fillRect(MARGIN, y, CONTENT, 16, LBLUE);
+      fillRect(MARGIN, y, 3, 16, BLUE);
+      doc.font("Helvetica-Bold").fontSize(7.5).fillColor(NAVY2)
+         .text(label.toUpperCase(), MARGIN + 10, y + 4, { width: CONTENT - 20, lineBreak: false });
+      doc.y = y + 16;
+    }
+
+    // ── KEY-VALUE TABLE (for structured objects) ──────────────────────────────
+    function drawKVTable(label, rows_data) {
+      const HDR_H   = 18;
+      const ROW_H   = 16;
+      const totalH  = HDR_H + rows_data.length * ROW_H;
+      const LABEL_H = 20;
+
+      ensureSpace(LABEL_H + totalH + 4);
+      const y = doc.y;
+
+      // Label bar
+      fillRect(MARGIN, y, CONTENT, LABEL_H, LGRAY2);
+      strokeRect(MARGIN, y, CONTENT, LABEL_H, BORDER, 0.3);
+      fillRect(MARGIN, y, 3, LABEL_H, BLUE);
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY2)
+         .text(label, MARGIN + 10, y + 6, { width: CONTENT - 20, lineBreak: false });
+
+      const TX  = MARGIN;
+      const TW  = CONTENT;
+      const CL  = TW * 0.4;
+      const CV  = TW * 0.6;
+      let ty    = y + LABEL_H;
+
+      // Table header
+      fillRect(TX, ty, TW, HDR_H, NAVY2);
+      doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
+         .text("PROPERTY", TX + 8, ty + 5, { width: CL - 12, lineBreak: false });
+      doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
+         .text("VALUE", TX + CL + 8, ty + 5, { width: CV - 12, lineBreak: false });
+      doc.save().strokeColor("rgba(255,255,255,0.2)").lineWidth(0.3)
+         .moveTo(TX + CL, ty).lineTo(TX + CL, ty + HDR_H).stroke().restore();
+      ty += HDR_H;
+
+      rows_data.forEach((row, si) => {
+        const bg = si % 2 === 0 ? WHITE : LGRAY;
+        fillRect(TX, ty, CL, ROW_H, bg);
+        fillRect(TX + CL, ty, CV, ROW_H, bg);
+        strokeRect(TX, ty, TW, ROW_H, BORDER, 0.2);
+        doc.save().strokeColor(BORDER).lineWidth(0.2)
+           .moveTo(TX + CL, ty).lineTo(TX + CL, ty + ROW_H).stroke().restore();
+        doc.font("Helvetica-Bold").fontSize(7.5).fillColor(MUTED)
+           .text(row.label, TX + 8, ty + 4, { width: CL - 16, lineBreak: false, ellipsis: true });
+        doc.font("Helvetica").fontSize(7.5).fillColor(TEXT)
+           .text(row.value, TX + CL + 8, ty + 4, { width: CV - 16, lineBreak: false, ellipsis: true });
+        ty += ROW_H;
+      });
+
+      doc.y = ty + 4;
+    }
+
+    // ── TAG LIST ──────────────────────────────────────────────────────────────
+    function drawTagList(label, items) {
+      const CHIP_H = 16, GAP = 5, PAD_X = 8;
+      const availW = CONTENT;
+
+      ensureSpace(40);
+      const y = doc.y;
+      fillRect(MARGIN, y, CONTENT, 18, LGRAY2);
+      strokeRect(MARGIN, y, CONTENT, 18, BORDER, 0.3);
+      fillRect(MARGIN, y, 3, 18, TEAL);
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY2)
+         .text(label, MARGIN + 10, y + 5, { width: CONTENT - 20, lineBreak: false });
+      doc.y = y + 18 + 6;
+
+      // Wrap chips
+      const lines = [[]];
+      let lineW = 0;
+      items.forEach(item => {
+        const cw = doc.font("Helvetica-Bold").fontSize(7).widthOfString(item) + PAD_X * 2 + GAP;
+        if (lineW + cw > availW && lines[lines.length - 1].length > 0) {
+          lines.push([item]);
+          lineW = cw;
+        } else {
+          lines[lines.length - 1].push(item);
+          lineW += cw;
         }
+      });
+
+      lines.forEach(line => {
+        ensureSpace(CHIP_H + GAP);
+        let cx = MARGIN;
+        const ly = doc.y;
+        line.forEach(item => {
+          const cw = doc.font("Helvetica-Bold").fontSize(7).widthOfString(item) + PAD_X * 2;
+          roundRect(cx, ly, cw, CHIP_H, 4, LBLUE2, "#93c5fd", 0.5);
+          doc.font("Helvetica-Bold").fontSize(7).fillColor(NAVY2)
+             .text(item, cx + PAD_X, ly + 5, { width: cw - PAD_X * 2, lineBreak: false });
+          cx += cw + GAP;
+        });
+        doc.y = ly + CHIP_H + GAP;
+      });
+    }
+
+    // ── MEDICAL GAS TABLE ─────────────────────────────────────────────────────
+    function drawMedGasTable(label, structured) {
+      const { gases, locationKeys, data: gasData } = structured;
+      const COL_GAS = 100;
+      const locW    = (CONTENT - COL_GAS) / locationKeys.length;
+      const HDR_H   = 20;
+      const ROW_H   = 16;
+      const totalH  = HDR_H * 2 + gases.length * ROW_H;
+
+      ensureSpace(22 + totalH + 6);
+      let y = doc.y;
+
+      fillRect(MARGIN, y, CONTENT, 20, LBLUE);
+      strokeRect(MARGIN, y, CONTENT, 20, BORDER, 0.3);
+      fillRect(MARGIN, y, 3, 20, TEAL);
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY2)
+         .text(label, MARGIN + 10, y + 6, { width: CONTENT - 20, lineBreak: false });
+      y += 20;
+
+      // Column headers
+      fillRect(MARGIN, y, COL_GAS, HDR_H, NAVY2);
+      doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
+         .text("GAS / SERVICE", MARGIN + 6, y + 6, { width: COL_GAS - 10, lineBreak: false });
+      locationKeys.forEach((loc, li) => {
+        const lx = MARGIN + COL_GAS + li * locW;
+        fillRect(lx, y, locW, HDR_H, li % 2 === 0 ? NAVY2 : "#1e40af");
+        doc.save().strokeColor("rgba(255,255,255,0.15)").lineWidth(0.3)
+           .rect(lx, y, locW, HDR_H).stroke().restore();
+        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
+           .text(loc.toUpperCase(), lx, y + 6, { width: locW, align: "center", lineBreak: false });
+      });
+      y += HDR_H;
+
+      gases.forEach((gas, gi) => {
+        const bg = gi % 2 === 0 ? WHITE : LGRAY;
+        fillRect(MARGIN, y, COL_GAS, ROW_H, bg);
+        strokeRect(MARGIN, y, COL_GAS, ROW_H, BORDER, 0.2);
+        doc.font("Helvetica-Bold").fontSize(7.5).fillColor(TEXT)
+           .text(gas.toUpperCase(), MARGIN + 6, y + 4, { width: COL_GAS - 10, lineBreak: false, ellipsis: true });
+
+        const gd = typeof gasData[gas] === "object" ? gasData[gas] : {};
+        locationKeys.forEach((loc, li) => {
+          const lx  = MARGIN + COL_GAS + li * locW;
+          const qty = gd[loc] !== undefined ? String(gd[loc]) : "—";
+          fillRect(lx, y, locW, ROW_H, bg);
+          strokeRect(lx, y, locW, ROW_H, BORDER, 0.2);
+          const hasQty = qty !== "0" && qty !== "—";
+          if (hasQty) fillRect(lx + locW / 2 - 6, y + 3, 12, 10, LBLUE2);
+          doc.font(hasQty ? "Helvetica-Bold" : "Helvetica").fontSize(7.5)
+             .fillColor(hasQty ? NAVY2 : MUTED2)
+             .text(qty, lx, y + 4, { width: locW, align: "center", lineBreak: false });
+        });
+        y += ROW_H;
+      });
+      doc.y = y + 6;
+    }
+
+    // ── CONSTRUCTION TABLE ────────────────────────────────────────────────────
+    function drawConstructionTable(label, structured) {
+      const { elements, cols, data: conData } = structured;
+      const COL_ELEM = 85;
+      const colW     = (CONTENT - COL_ELEM) / cols.length;
+      const HDR_H    = 18;
+      const ROW_H    = 15;
+      const totalH   = HDR_H + elements.length * ROW_H;
+
+      ensureSpace(22 + totalH + 6);
+      let y = doc.y;
+
+      fillRect(MARGIN, y, CONTENT, 20, LGRAY2);
+      strokeRect(MARGIN, y, CONTENT, 20, BORDER, 0.3);
+      fillRect(MARGIN, y, 3, 20, ACCENT);
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY2)
+         .text(label, MARGIN + 10, y + 6, { width: CONTENT - 20, lineBreak: false });
+      y += 20;
+
+      fillRect(MARGIN, y, COL_ELEM, HDR_H, NAVY2);
+      doc.font("Helvetica-Bold").fontSize(6.5).fillColor(WHITE)
+         .text("ELEMENT", MARGIN + 4, y + 5, { width: COL_ELEM - 8, lineBreak: false });
+
+      cols.forEach((col, ci) => {
+        const cx = MARGIN + COL_ELEM + ci * colW;
+        fillRect(cx, y, colW, HDR_H, ci % 2 === 0 ? NAVY2 : "#1e40af");
+        doc.save().strokeColor("rgba(255,255,255,0.15)").lineWidth(0.3)
+           .rect(cx, y, colW, HDR_H).stroke().restore();
+        doc.font("Helvetica-Bold").fontSize(6).fillColor(WHITE)
+           .text(col.toUpperCase(), cx, y + 5, { width: colW, align: "center", lineBreak: false });
+      });
+      y += HDR_H;
+
+      elements.forEach((elem, ei) => {
+        const bg = ei % 2 === 0 ? WHITE : LGRAY;
+        fillRect(MARGIN, y, COL_ELEM, ROW_H, bg);
+        strokeRect(MARGIN, y, COL_ELEM, ROW_H, BORDER, 0.2);
+        doc.font("Helvetica-Bold").fontSize(7).fillColor(TEXT)
+           .text(keyToLabel(elem), MARGIN + 5, y + 4, { width: COL_ELEM - 8, lineBreak: false, ellipsis: true });
+
+        const elemData = typeof conData[elem] === "object" ? conData[elem] : {};
+        cols.forEach((col, ci) => {
+          const cx  = MARGIN + COL_ELEM + ci * colW;
+          const val = elemData[col] !== undefined ? String(elemData[col]) : "—";
+          fillRect(cx, y, colW, ROW_H, bg);
+          strokeRect(cx, y, colW, ROW_H, BORDER, 0.2);
+          doc.font("Helvetica").fontSize(7).fillColor(val === "—" ? MUTED2 : TEXT)
+             .text(val, cx + 2, y + 4, { width: colW - 4, align: "center", lineBreak: false, ellipsis: true });
+        });
+        y += ROW_H;
+      });
+      doc.y = y + 4;
+    }
+
+    // ── ELV TABLE ─────────────────────────────────────────────────────────────
+    function drawElvTable(label, structured) {
+      const { systems, quantities } = structured;
+      const cols = ["Wall", "BHP", "MP", "Ceiling"];
+      const COL_SYS = 120;
+      const colW    = (CONTENT - COL_SYS) / cols.length;
+      const HDR_H   = 18;
+      const ROW_H   = 15;
+
+      ensureSpace(22 + HDR_H + systems.length * ROW_H + 6);
+      let y = doc.y;
+
+      fillRect(MARGIN, y, CONTENT, 20, LGRAY2);
+      strokeRect(MARGIN, y, CONTENT, 20, BORDER, 0.3);
+      fillRect(MARGIN, y, 3, 20, ACCENT);
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY2)
+         .text(label, MARGIN + 10, y + 6, { width: CONTENT - 20, lineBreak: false });
+      y += 20;
+
+      fillRect(MARGIN, y, COL_SYS, HDR_H, NAVY2);
+      doc.font("Helvetica-Bold").fontSize(6.5).fillColor(WHITE)
+         .text("SYSTEM", MARGIN + 5, y + 5, { width: COL_SYS - 10, lineBreak: false });
+      cols.forEach((col, ci) => {
+        const cx = MARGIN + COL_SYS + ci * colW;
+        fillRect(cx, y, colW, HDR_H, ci % 2 === 0 ? NAVY2 : "#1e40af");
+        doc.font("Helvetica-Bold").fontSize(6.5).fillColor(WHITE)
+           .text(col.toUpperCase(), cx, y + 5, { width: colW, align: "center", lineBreak: false });
+      });
+      y += HDR_H;
+
+      systems.forEach((sys, si) => {
+        const bg = si % 2 === 0 ? WHITE : LGRAY;
+        fillRect(MARGIN, y, COL_SYS, ROW_H, bg);
+        strokeRect(MARGIN, y, COL_SYS, ROW_H, BORDER, 0.2);
+        doc.font("Helvetica").fontSize(7.5).fillColor(TEXT)
+           .text(sys, MARGIN + 5, y + 4, { width: COL_SYS - 10, lineBreak: false, ellipsis: true });
+        cols.forEach((col, ci) => {
+          const cx  = MARGIN + COL_SYS + ci * colW;
+          const qty = (quantities[sys] && quantities[sys][col]) !== undefined
+            ? String(quantities[sys][col]) : "—";
+          fillRect(cx, y, colW, ROW_H, bg);
+          strokeRect(cx, y, colW, ROW_H, BORDER, 0.2);
+          doc.font("Helvetica").fontSize(7.5).fillColor(qty !== "0" && qty !== "—" ? NAVY2 : MUTED2)
+             .text(qty, cx, y + 4, { width: colW, align: "center", lineBreak: false });
+        });
+        y += ROW_H;
+      });
+      doc.y = y + 4;
+    }
+
+    // ── SECTION DATA CATEGORISER ──────────────────────────────────────────────
+    // Detects groups of yes/no fields for compact grid rendering
+    function categorisePairs(pairs) {
+      // returns array of {type: "yesno"|"qty"|"text"|"structured", items: [...]}
+      const groups = [];
+      let ynBuffer = [], qtBuffer = [];
+
+      function flushYN() {
+        if (ynBuffer.length > 0) { groups.push({ type: "yesno", items: [...ynBuffer] }); ynBuffer = []; }
+      }
+      function flushQT() {
+        if (qtBuffer.length > 0) { groups.push({ type: "qty", items: [...qtBuffer] }); qtBuffer = []; }
       }
 
-      // Section loop
+      pairs.forEach(([label, value, rawKey]) => {
+        const isStructured = STRUCTURED_KEYS.has(rawKey);
+        const parsed = isStructured ? tryParseJson(value) : null;
+        const structured = parsed ? flattenStructured(parsed, rawKey) : null;
+
+        if (structured) {
+          flushYN(); flushQT();
+          groups.push({ type: "structured", label, structured });
+          return;
+        }
+
+        const isYN  = /^(yes|no)$/i.test(String(value).trim()) || value === true || value === false;
+        const isQTY = !isYN && /^\d+$/.test(String(value).trim()) && parseInt(value) <= 999;
+
+        if (isYN) {
+          flushQT();
+          ynBuffer.push({ label, value });
+        } else if (isQTY && label.length < 40) {
+          flushYN();
+          qtBuffer.push({ label, value });
+        } else {
+          flushYN(); flushQT();
+          groups.push({ type: "text", label, value, rawKey });
+        }
+      });
+      flushYN(); flushQT();
+      return groups;
+    }
+
+    // ── MAIN RENDER LOOP ──────────────────────────────────────────────────────
+    rows.forEach((r, rIdx) => {
+      if (rIdx > 0) doc.addPage();
+      const d    = r.data || {};
+      const crit = d.criticalityLevel || "";
+      const critC = CRIT_COLORS[crit] || BLUE;
+      const critBG = CRIT_BG[crit]   || LBLUE;
+      currentRoomCode = r.roomCode || d.roomCode || "";
+
+      // ── COVER HEADER ──────────────────────────────────────────────────────
+      // Full-width deep navy bar with accent stripe
+      fillRect(0, 0, PAGE_W, 52, NAVY);
+      fillRect(0, 0, 5, 52, ACCENT);
+      doc.font("Helvetica-Bold").fontSize(13).fillColor(WHITE)
+         .text("ROOM DATA SHEET", MARGIN + 8, 14, { width: CONTENT * 0.55 });
+      doc.font("Helvetica").fontSize(8).fillColor(MUTED2)
+         .text("Medical College  ·  Facility Planning", MARGIN + 8, 28, { width: CONTENT * 0.55 });
+
+      // Page number placeholder top-right
+      doc.font("Helvetica").fontSize(7.5).fillColor(MUTED2)
+         .text("Confidential  ·  Internal Use Only", MARGIN, 20, { width: CONTENT, align: "right" });
+
+      doc.y = 66;
+      let y = doc.y;
+
+      // ── ROOM IDENTITY HERO CARD ────────────────────────────────────────────
+      const HERO_H = 76;
+      roundRect(MARGIN, y, CONTENT, HERO_H, 4, critBG, critC, 1.2);
+
+      // Criticality badge top-right
+      const BADGE_W = 80, BADGE_H = 22;
+      const bx = MARGIN + CONTENT - BADGE_W - 10;
+      const by = y + 10;
+      roundRect(bx, by, BADGE_W, BADGE_H, 4, critC, critC, 0);
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(WHITE)
+         .text((crit || "SUBMITTED").toUpperCase(), bx, by + 7, { width: BADGE_W, align: "center", lineBreak: false });
+
+      // Room code
+      doc.font("Helvetica-Bold").fontSize(18).fillColor(NAVY)
+         .text(currentRoomCode || "—", MARGIN + 14, y + 10, { width: CONTENT * 0.65, lineBreak: false });
+      // Room name
+      doc.font("Helvetica").fontSize(10).fillColor(MUTED)
+         .text(d.roomName || r.roomName || "Unnamed Room", MARGIN + 14, y + 34, { width: CONTENT * 0.65, lineBreak: false });
+      // Typology pill
+      if (d.roomTypology) {
+        const typW = doc.font("Helvetica-Bold").fontSize(7).widthOfString(d.roomTypology) + 16;
+        roundRect(MARGIN + 14, y + 52, typW, 14, 3, NAVY2, NAVY2, 0);
+        doc.font("Helvetica-Bold").fontSize(7).fillColor(WHITE)
+           .text(d.roomTypology.toUpperCase(), MARGIN + 14, y + 56, { width: typW, align: "center", lineBreak: false });
+      }
+
+      y += HERO_H + 10;
+      doc.y = y;
+
+      // ── SUMMARY META GRID ─────────────────────────────────────────────────
+      const META = [
+        ["DEPARTMENT",   d.department  || r.department  || "—"],
+        ["PROJECT",      d.projectName || d.project     || "—"],
+        ["LOCATION",     d.location    || "—"],
+        ["NET AREA",     d.netArea     ? `${d.netArea} m²` : "—"],
+        ["PATIENT CAP.", d.patientCapacity || "—"],
+        ["CREATED",      r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" }) : "—"],
+      ];
+
+      const MCOLS = 3, MCW = CONTENT / MCOLS, MCH = 34;
+      META.forEach(([label, value], i) => {
+        const col = i % MCOLS, row = Math.floor(i / MCOLS);
+        const cx = MARGIN + col * MCW, cy = y + row * MCH;
+        const bg = col % 2 === 0 ? LGRAY2 : WHITE;
+        fillAndStroke(cx, cy, MCW, MCH, bg, BORDER, 0.3);
+        // Top accent line per cell
+        fillRect(cx, cy, MCW, 2, BLUE + "22");
+        doc.font("Helvetica-Bold").fontSize(6.5).fillColor(MUTED2)
+           .text(label, cx + 8, cy + 6, { width: MCW - 16, lineBreak: false });
+        doc.font("Helvetica-Bold").fontSize(9.5).fillColor(TEXT)
+           .text(String(value), cx + 8, cy + 17, { width: MCW - 16, lineBreak: false, ellipsis: true });
+      });
+
+      y += Math.ceil(META.length / MCOLS) * MCH + 14;
+      doc.y = y;
+
+      // ── ROOM IMAGE ────────────────────────────────────────────────────────
+      const imagePath = d.imagePath;
+      if (imagePath && fs.existsSync(imagePath)) {
+        ensureSpace(160);
+        y = doc.y;
+        fillRect(MARGIN, y, CONTENT, 18, LGRAY2);
+        strokeRect(MARGIN, y, CONTENT, 18, BORDER, 0.3);
+        fillRect(MARGIN, y, 3, 18, BLUE);
+        doc.font("Helvetica-Bold").fontSize(8).fillColor(NAVY2)
+           .text("EXTRACTED ROOM LAYOUT / FLOOR PLAN", MARGIN + 10, y + 5, { width: CONTENT - 20, lineBreak: false });
+        y += 18 + 6;
+        try {
+          const imgBuffer = fs.readFileSync(imagePath);
+          const img = doc.openImage(imgBuffer);
+          const maxW = 280, scale = maxW / img.width, imgH = img.height * scale;
+          // Frame the image
+          roundRect(MARGIN, y, maxW + 12, imgH + 12, 4, LGRAY, BORDER2, 0.5);
+          doc.image(imgBuffer, MARGIN + 6, y + 6, { width: maxW, height: imgH });
+          y += imgH + 24;
+        } catch (e) {
+          doc.font("Helvetica").fontSize(8).fillColor(MUTED)
+             .text("(Image data could not be rendered)", MARGIN, y + 8);
+          y += 24;
+        }
+        doc.y = y;
+      }
+
+      // ── SECTIONS ──────────────────────────────────────────────────────────
       SECTIONS.forEach((sec, secIdx) => {
         const pairs = sec.keys
           .filter(k => d[k] != null && String(d[k]).trim() !== "")
           .map(k => [toLabel(k), formatFieldValue(k, d[k]), k]);
         if (!pairs.length) return;
 
-        // Pre-measure rows
-        const rowHeights = pairs.map(([label, value]) => {
-          const labelH = doc.font("Helvetica-Bold").fontSize(8.5)
-            .heightOfString(label, { width: COL1 - 14 });
-          const valueH = doc.font("Helvetica").fontSize(9)
-            .heightOfString(value, { width: COL2 - 14 });
-          return Math.max(labelH, valueH) + PAD * 2;
-        });
+        drawSectionHeader(sec.label);
 
-        ensureSpace(20 + Math.min(rowHeights[0] || 20, 60) + 12);
+        // Categorise pairs into smart groups
+        const groups = categorisePairs(pairs);
+        let rowIdx = 0;
 
-        let y = doc.y;
-
-        fillRect(MARGIN, y, CONTENT, 20, NAVY);
-        doc.font("Helvetica-Bold").fontSize(9).fillColor(WHITE)
-           .text(sec.label.toUpperCase(), MARGIN + 8, y + 6, { width: CONTENT - 16 });
-        y += 20;
-        doc.y = y;
-
-        pairs.forEach(([label, value, rawKey], i) => {
-          const isStructured = STRUCTURED_KEYS.has(rawKey);
-          const parsed = isStructured ? tryParseJson(value) : null;
-          const structured = parsed ? flattenStructured(parsed, rawKey) : null;
-          const isValidated = Array.isArray(d.validationFilledFields) && d.validationFilledFields.includes(rawKey);
-
-          if (structured) {
-            drawStructuredField(label, structured, i);
-          } else {
-            const ROW_H = rowHeights[i];
-            ensureSpace(ROW_H + 2);
-            y = doc.y;
-
-            const bgLabel = i % 2 === 0 ? LGRAY    : "#fafbfc";
-            const bgValue = i % 2 === 0 ? WHITE    : "#fdfdfd";
-            fillRect(MARGIN,        y, COL1, ROW_H, bgLabel);
-            fillRect(MARGIN + COL1, y, COL2, ROW_H, bgValue);
-
-            doc.save().strokeColor(BORDER).lineWidth(0.3)
-               .rect(MARGIN, y, CONTENT, ROW_H).stroke().restore();
-            doc.save().strokeColor(BORDER).lineWidth(0.3)
-               .moveTo(MARGIN + COL1, y).lineTo(MARGIN + COL1, y + ROW_H).stroke().restore();
-
-            const labelTextH = doc.font("Helvetica-Bold").fontSize(8.5)
-              .heightOfString(label, { width: COL1 - 14 });
-            const labelY = y + (ROW_H - labelTextH) / 2;
-            doc.font("Helvetica-Bold").fontSize(8.5).fillColor(MUTED)
-               .text(label, MARGIN + 7, labelY,
-                     { width: COL1 - 14, lineBreak: false, ellipsis: true });
-
-            doc.font("Helvetica").fontSize(9).fillColor(TEXT)
-               .text(value, MARGIN + COL1 + 7, y + PAD,
-                     { width: COL2 - 14, lineBreak: true });
-
-            // ✓ Validated badge — top-right of value cell
-            if (isValidated) {
-              const badgeTxt = "✓ Validated";
-              const badgeW = doc.font("Helvetica-Bold").fontSize(6.5).widthOfString(badgeTxt) + 8;
-              const badgeX = MARGIN + COL1 + COL2 - badgeW - 3;
-              const badgeY = y + 3;
-              fillRect(badgeX, badgeY, badgeW, 11, "#dcfce7");
-              doc.save().strokeColor("#86efac").lineWidth(0.3).rect(badgeX, badgeY, badgeW, 11).stroke().restore();
-              doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#15803d")
-                 .text(badgeTxt, badgeX + 4, badgeY + 2, { width: badgeW - 8, lineBreak: false });
+        groups.forEach(group => {
+          if (group.type === "yesno") {
+            // Only draw sub-header if it's a meaningful group
+            if (group.items.length >= 3) {
+              drawYesNoGrid(group.items);
+            } else {
+              group.items.forEach(({ label, value }) => {
+                drawRow(label, value, rowIdx++, false);
+              });
             }
-
-            y = y + ROW_H;
-            doc.y = y;
+          } else if (group.type === "qty") {
+            if (group.items.length >= 4) {
+              drawQuantityGrid(group.items);
+            } else {
+              group.items.forEach(({ label, value }) => {
+                drawRow(label, value, rowIdx++, false);
+              });
+            }
+          } else if (group.type === "text") {
+            const isValidated = Array.isArray(d.validationFilledFields) && d.validationFilledFields.includes(group.rawKey);
+            drawRow(group.label, group.value, rowIdx++, isValidated);
+          } else if (group.type === "structured") {
+            const s = group.structured;
+            if (s.type === "keyValue" && s.rows.length > 0) {
+              drawKVTable(group.label, s.rows);
+            } else if (s.type === "tagList" && s.items.length > 0) {
+              drawTagList(group.label, s.items);
+            } else if (s.type === "medGasTable") {
+              drawMedGasTable(group.label, s);
+            } else if (s.type === "constructionTable") {
+              drawConstructionTable(group.label, s);
+            } else if (s.type === "elvTable") {
+              drawElvTable(group.label, s);
+            } else {
+              drawRow(group.label, JSON.stringify(group.structured), rowIdx++, false);
+            }
           }
         });
 
-        doc.y += 8;
-
-        // ── Validation Notes box for this section ──────────────────────────────
+        // AI Validation Notes
         const sectionId = String(secIdx + 1);
-        const rawNote = (d.validationNotes || {})[sectionId];
+        const rawNote   = (d.validationNotes || {})[sectionId];
         const notePoints = Array.isArray(rawNote) ? rawNote : rawNote ? [String(rawNote)] : [];
         if (notePoints.length > 0) {
-          const NOTE_PAD = 8;
-          const BULLET_H = 14; // height per bullet row
+          const NOTE_PAD = 8, BULLET_H = 15;
           const bodyH = notePoints.length * BULLET_H + NOTE_PAD * 2;
-          const noteBoxH = 16 + bodyH; // 16 = header row
-          ensureSpace(noteBoxH + 6);
+          const boxH  = 20 + bodyH;
+          ensureSpace(boxH + 8);
           const ny = doc.y;
 
-          // Header bar — no emoji, plain text
-          fillRect(MARGIN, ny, CONTENT, 16, "#e0f2fe");
-          doc.save().strokeColor("#7dd3fc").lineWidth(0.4).rect(MARGIN, ny, CONTENT, 16).stroke().restore();
-          // Small square icon instead of emoji
-          fillRect(MARGIN + 8, ny + 4, 8, 8, "#0369a1");
+          // Header
+          fillRect(MARGIN, ny, CONTENT, 20, "#e0f2fe");
+          strokeRect(MARGIN, ny, CONTENT, 20, "#7dd3fc", 0.4);
+          fillRect(MARGIN, ny, 3, 20, "#0369a1");
+          // Icon square
+          roundRect(MARGIN + 9, ny + 6, 8, 8, 1, "#0369a1", "#0369a1", 0);
           doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#0369a1")
-             .text("AI  VALIDATION NOTES", MARGIN + 22, ny + 4, { width: CONTENT - 30, lineBreak: false });
+             .text("AI  VALIDATION NOTES", MARGIN + 22, ny + 7, { width: CONTENT - 30, lineBreak: false });
 
-          // Body background
-          fillRect(MARGIN, ny + 16, CONTENT, bodyH, "#f0f9ff");
-          doc.save().strokeColor("#7dd3fc").lineWidth(0.4).rect(MARGIN, ny + 16, CONTENT, bodyH).stroke().restore();
+          // Body
+          fillRect(MARGIN, ny + 20, CONTENT, bodyH, "#f0f9ff");
+          strokeRect(MARGIN, ny + 20, CONTENT, bodyH, "#7dd3fc", 0.4);
 
-          // Bullet points — one per note
           notePoints.forEach((point, pi) => {
             const bx = MARGIN + NOTE_PAD;
-            const by = ny + 16 + NOTE_PAD + pi * BULLET_H;
-            // Bullet dot
-            doc.save().fillColor("#0369a1").circle(bx + 2, by + 4, 2).fill().restore();
-            // Point text
+            const by = ny + 20 + NOTE_PAD + pi * BULLET_H;
+            dot(bx + 2, by + 5, 2.2, "#0369a1");
             doc.font("Helvetica").fontSize(8).fillColor("#0c4a6e")
-               .text(point.trim(), bx + 10, by, { width: CONTENT - NOTE_PAD * 2 - 10, lineBreak: false, ellipsis: true });
+               .text(point.trim(), bx + 10, by + 1, { width: CONTENT - NOTE_PAD * 2 - 12, lineBreak: false, ellipsis: true });
           });
 
-          doc.y = ny + noteBoxH + 6;
+          doc.y = ny + boxH + 8;
         }
+
+        doc.y += 6;
       });
 
-      ensureSpace(20);
-      hLine(doc.y, BORDER, 0.5);
-      doc.font("Helvetica").fontSize(7.5).fillColor(MUTED)
+      // ── FOOTER ────────────────────────────────────────────────────────────
+      ensureSpace(24);
+      const fy = doc.y + 4;
+      fillRect(MARGIN, fy, CONTENT, 1, LGRAY3);
+      doc.font("Helvetica").fontSize(7).fillColor(MUTED2)
          .text(
-           `Generated: ${new Date().toLocaleString("en-IN")}   |   RDS ID: ${r.id}   |   Medical Infra Facility Planning`,
-           MARGIN, doc.y + 4, { width: CONTENT, align: "center" }
+           `Generated: ${new Date().toLocaleString("en-IN")}   ·   RDS ID: ${r.id}   ·   Medical Infra Facility Planning   ·   Confidential`,
+           MARGIN, fy + 5, { width: CONTENT, align: "center" }
          );
     });
 
