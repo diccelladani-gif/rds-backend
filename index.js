@@ -262,9 +262,28 @@ async function writeAll(rows) {
 // ─── USERS HELPER ─────────────────────────────────────────
 function readUsers() {
   return [
-    { id: "EMP001", name: "Parth", email: "parth.patel4@adani.com", password: "123",  role: "admin",    department: "administration" },
-    { id: "EMP002", name: "Ravi",  email: "ravi@rds.med",  password: "1234", role: "reviewer", department: "clinical"       },
-    { id: "EMP003", name: "Healthcare",  email: "healthcare@rds.med",  password: "123", role: "reviewer", department: "clinical"       },
+    { id: "EMP001", name: "Parth Patel", email: "parth.patel4@adani.com", password: "123",  role: "admin",    department: "administration" },
+    { id: "EMP002", name: "Sujay Choukhande",  email: "sujay.choukhande1@adani.com",  password: "Sujay@06", role: "reviewer", department: "clinical"       },
+    { id: "EMP003", name: "Girish Thagaria",  email: "girish.thagaria@adani.com",  password: "Girish@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP004", name: "Albin John",  email: "albin.john@macegroup.com",  password: "Albin@123", role: "reviewer", department: "clinical"  } , 
+    { id: "EMP005", name: "Ravi Sharma",  email: "ravi.sharma@adani.com",  password: "Ravi@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP006", name: "Neha Lal",  email: "neha.lal@adani.com",  password: "Neha@123", role: "reviewer", department: "clinical"  } , 
+    { id: "EMP007", name: "Prabhu D",  email: "prabhu.d@macegroup.com",  password: "Prabhu@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP008", name: "Himanshu Bhardwaj",  email: "himanshu.bhardwaj@adani.com",  password: "Himanshu@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP009", name: "Vanshika Jain",  email: "vanshika.jain2@adani.com",  password: "Vanshika@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP010", name: "Prachi Patel",  email: "prachi.patel8@adani.com",  password: "Prachi@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP011", name: "Aarna Fozdar",  email: "aarna.fozdar@adani.com",  password: "Aarna@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP012", name: "Adarsh Yede",  email: "adarsh.yede@adani.com",  password: "Adarsh@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP013", name: "Meghanshi Mathur",  email: "meghanshi.mathur@adani.com",  password: "Meghanshi@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP014", name: "Akash Giri",  email: "akash.giri1@adani.com",  password: "Akash@123", role: "reviewer", department: "clinical"  }   ,
+    { id: "EMP015", name: "Dipakkumar Paradkar",  email: "dipakkumar.paradkar@adani.com",  password: "Dipakkumar@123", role: "reviewer", department: "clinical"  }  ,
+    { id: "EMP016", name: "Punit Patel",  email: "punit.patel@adani.com",  password: "Punit@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP017", name: "Prashant Jhaveri",  email: "prashant.jhaveri@adani.com",  password: "Prashant@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP018", name: "Vanshi Adani",  email: "vanshi.adani@adani.com",  password: "Vanshi@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP019", name: "Malay Mahadevia",  email: "malay.mahadevia@adani.com",  password: "Malay@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP020", name: "Vishant Tyagi",  email: "vishant.tyagi@adani.com",  password: "Vishant@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP021", name: "Saurin Gandhi",  email: "saurin.gandhi@adani.com",  password: "Saurin@123", role: "reviewer", department: "clinical"  } ,
+    { id: "EMP022", name: "Meet Pillai",  email: "Meet.Pillau@adani.com",  password: "Meet@123", role: "reviewer", department: "clinical"  } ,
   ];
 }
 
